@@ -113,11 +113,20 @@ pub struct CtrInstantiateInput<C: Cipher> {
 }
 
 impl<C: Cipher> InstantiateInputInit for CtrInstantiateInput<C> {
-    fn init(personalization_string: Option<&[u8]>) -> Self {
+    fn init(personalization_string: &[u8]) -> Self {
+        use rand::{TryRngCore, rngs::OsRng};
+        let mut key = vec![0; C::KEY_LEN];
+        OsRng
+            .try_fill_bytes(&mut key)
+            .expect("Failed to generate entropy for key when instantiating cipher.");
+        let mut nonce = vec![0; C::SECURITY_STRENGTH / 2];
+        OsRng
+            .try_fill_bytes(&mut nonce)
+            .expect("Failed to generate entropy for nonce when instantiating cipher.");
         Self {
-            entropy_input: C::key_from_slice(&vec![0; C::KEY_LEN]),
-            nonce: C::nonce_from_slice(&vec![0; C::SECURITY_STRENGTH / 2]),
-            personalization_string: personalization_string.map_or(vec![], |v| v.to_vec()),
+            entropy_input: C::key_from_slice(&key),
+            nonce: C::nonce_from_slice(&nonce),
+            personalization_string: Vec::from(personalization_string),
         }
     }
 }
@@ -128,8 +137,16 @@ pub struct CtrReseedInput<C: Cipher> {
 }
 
 impl<C: Cipher> ReseedInputInit for CtrReseedInput<C> {
-    fn init() -> Self {
-        todo!()
+    fn init(additional_input: &[u8]) -> Self {
+        use rand::{TryRngCore, rngs::OsRng};
+        let mut key = vec![0; C::KEY_LEN];
+        OsRng
+            .try_fill_bytes(&mut key)
+            .expect("Failed to generate entropy for reseeding cipher.");
+        Self {
+            entropy_input: C::key_from_slice(&key),
+            additional_input: Vec::from(additional_input),
+        }
     }
 }
 
@@ -139,8 +156,11 @@ pub struct CtrGenerateInput {
 }
 
 impl GenerateInputInit for CtrGenerateInput {
-    fn init() -> Self {
-        todo!()
+    fn init(requested_number_of_bits: u32, additional_input: &[u8]) -> Self {
+        Self {
+            requested_number_of_bits,
+            additional_input: Vec::from(additional_input),
+        }
     }
 }
 
@@ -150,7 +170,6 @@ impl<Pr: PredictionResistance, C: Cipher> DrbgVariant for Ctr<Pr, C> {
     type InstantiateInput = CtrInstantiateInput<cipher::Aes256>;
     type ReseedInput = CtrReseedInput<cipher::Aes256>;
     type GenerateInput = CtrGenerateInput;
-    type GenerateOutput = Vec<u8>;
     fn instantiate(
         CtrInstantiateInput {
             entropy_input,
@@ -200,7 +219,7 @@ impl<Pr: PredictionResistance, C: Cipher> DrbgVariant for Ctr<Pr, C> {
             requested_number_of_bits,
             additional_input,
         }: Self::GenerateInput,
-    ) -> Result<Self::GenerateOutput, crate::drbg::GenerateError> {
+    ) -> Result<Vec<u8>, crate::drbg::GenerateError> {
         if Pr::must_reseed(self.reseed_counter, Self::MAX_RESEED_INTERVAL) {
             return Err(crate::drbg::GenerateError::ReseedRequired);
         }
@@ -229,9 +248,6 @@ impl<Pr: PredictionResistance, C: Cipher> DrbgVariant for Ctr<Pr, C> {
         self.update(&additional_input);
         self.reseed_counter += 1;
 
-        Ok(temp
-            .into_iter()
-            .take(requested_number_of_bits)
-            .collect::<Vec<_>>())
+        Ok(Vec::from(&temp[..requested_number_of_bits]))
     }
 }
