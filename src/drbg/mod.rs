@@ -1,8 +1,9 @@
-use crate::drbg::variant::{DrbgVariant, GenerateInputInit, InstantiateInputInit, ReseedInputInit};
-use entropy::Entropy;
+use crate::{
+    Entropy,
+    drbg::variant::{DrbgVariant, GenerateInputInit, InstantiateInputInit, ReseedInputInit},
+};
 use std::marker::PhantomData;
 
-pub mod entropy;
 pub mod variant;
 
 pub struct Drbg<V, E> {

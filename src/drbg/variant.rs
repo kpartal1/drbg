@@ -16,7 +16,11 @@ pub trait GenerateInputInit {
 pub trait DrbgVariant {
     const MAX_RESEED_INTERVAL: u64;
     const SECURITY_STRENGTH: usize;
+
     const MIN_ENTROPY: usize = Self::SECURITY_STRENGTH;
+    const MAX_ENTROPY: usize = 1 << 35;
+    const MAX_PERSONALIZATION_STRING_LENGTH: usize = 1 << 35;
+    const MAX_ADDITIONAL_INPUT_LENGTH: usize = 1 << 35;
 
     type InstantiateInput: InstantiateInputInit;
     type ReseedInput: ReseedInputInit;

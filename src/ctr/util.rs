@@ -10,11 +10,12 @@ pub fn inc(block: &mut [u8]) {
 }
 
 pub fn block_cipher_df<C: Cipher>(input_string: &[u8]) -> C::Seed {
-    debug_assert!(input_string.len().is_multiple_of(8));
-    let l = (input_string.len() / 8) as u32;
-    let n = (C::SEED_LEN / 8) as u32;
+    let l = input_string.len() as u32;
+    let n = C::SEED_LEN as u32;
 
-    let mut s = Vec::with_capacity(std::mem::size_of::<u32>() * 2 + input_string.len() + 1);
+    let len = (std::mem::size_of::<u32>() * 2 + input_string.len() + 1).div_ceil(C::BLOCK_LEN)
+        * C::BLOCK_LEN;
+    let mut s = Vec::with_capacity(len);
     s.extend(l.to_be_bytes());
     s.extend(n.to_be_bytes());
     s.extend(input_string);
@@ -29,21 +30,21 @@ pub fn block_cipher_df<C: Cipher>(input_string: &[u8]) -> C::Seed {
 
     let mut temp = Vec::with_capacity(C::SEED_LEN);
     let mut i = 0u32;
-    while temp.len() < C::KEY_LEN + C::SEED_LEN {
+    while temp.len() < C::SEED_LEN {
         let mut iv_s = Vec::with_capacity(C::SEED_LEN + s.len());
         iv_s.extend(i.to_be_bytes());
-        iv_s.extend(vec![0; C::SEED_LEN - std::mem::size_of::<u32>()]);
-        iv_s.extend(s.clone());
+        iv_s.extend(vec![0; C::BLOCK_LEN - std::mem::size_of::<u32>()]);
+        iv_s.extend(&s);
 
-        let bcc_out: C::Block = bcc::<C>(&k, &iv_s);
-        temp.extend(bcc_out.as_ref());
+        let bcc: C::V = bcc::<C>(&k, &iv_s);
+        temp.extend(bcc.as_ref());
         i += 1;
     }
 
     let k = &temp[..C::KEY_LEN];
     let cipher = C::new(&C::key_from_slice(k));
 
-    let mut x = C::block_from_slice(&temp[C::KEY_LEN..C::SEED_LEN]);
+    let mut x = C::block_from_slice(&temp[C::KEY_LEN..C::KEY_LEN + C::BLOCK_LEN]);
     let mut temp = Vec::with_capacity(C::SEED_LEN);
     while temp.len() < C::SEED_LEN {
         cipher.block_encrypt(&mut x);
@@ -53,7 +54,7 @@ pub fn block_cipher_df<C: Cipher>(input_string: &[u8]) -> C::Seed {
     C::seed_from_slice(&temp[..C::SEED_LEN])
 }
 
-fn bcc<C: Cipher>(key: &C::Key, data: &[u8]) -> C::Block {
+fn bcc<C: Cipher>(key: &C::Key, data: &[u8]) -> C::V {
     let cipher = C::new(key);
 
     let mut chaining_value = C::block_from_slice(&vec![0; C::BLOCK_LEN]);

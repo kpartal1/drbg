@@ -7,7 +7,7 @@ mod util;
 pub use cipher::{Aes128, Aes192, Aes256};
 
 pub struct Ctr<C: Cipher> {
-    v: C::Block,
+    v: C::V,
     key: C::Key,
 }
 
@@ -32,9 +32,6 @@ impl<C: Cipher> Ctr<C> {
         self.v = C::block_from_slice(&temp[temp.len() - C::BLOCK_LEN..]);
     }
 }
-
-#[derive(Debug)]
-pub struct RequestedTooManyBytes;
 
 pub struct CtrInstantiateInput<C: Cipher> {
     entropy_input: C::Key,
@@ -81,13 +78,13 @@ impl GenerateInputInit for CtrGenerateInput {
 }
 
 impl<C: Cipher> DrbgVariant for Ctr<C> {
-    const MAX_RESEED_INTERVAL: u64 = 1 << 48;
+    const MAX_RESEED_INTERVAL: u64 = C::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = C::SECURITY_STRENGTH;
 
     type InstantiateInput = CtrInstantiateInput<cipher::Aes256>;
     type ReseedInput = CtrReseedInput<cipher::Aes256>;
     type GenerateInput = CtrGenerateInput;
-    type GenerateError = RequestedTooManyBytes;
+    type GenerateError = std::convert::Infallible;
 
     fn instantiate(
         CtrInstantiateInput {
@@ -135,9 +132,6 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
             additional_input,
         }: Self::GenerateInput,
     ) -> Result<Vec<u8>, Self::GenerateError> {
-        if requested_number_of_bytes > C::MAX_NUMBER_OF_BYTES_PER_REQUEST {
-            return Err(RequestedTooManyBytes);
-        }
         let requested_number_of_bytes = requested_number_of_bytes as usize;
 
         let additional_input = match additional_input.len() {

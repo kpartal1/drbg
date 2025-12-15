@@ -14,10 +14,11 @@ impl Entropy for NoEntropy {
 fn main() {
     println!(
         "{:?}",
-        DrbgNoPrCtrAes256::<NoEntropy>::new_with_entropy(vec![])
-            .unwrap()
-            .get_random_bytes(42, vec![])
+        DrbgNoPrCtrAes256::<NoEntropy>::random_bytes_with_entropy(42, vec![], vec![])
     );
+    println!("{:?}", DrbgNoPrCtrAes256::random_bytes(42, vec![], vec![]));
+    let mut e = DrbgNoPrCtrAes256::default();
+    println!("{:?}", e.get_random_bytes(42, vec![]));
     match DrbgNoPrCtrAes256::new(vec![]) {
         Ok(mut drbg) => {
             for _ in 0..10 {
