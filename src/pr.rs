@@ -1,4 +1,5 @@
 pub struct Pr;
+
 pub struct NoPr;
 
 pub trait PredictionResistance {
