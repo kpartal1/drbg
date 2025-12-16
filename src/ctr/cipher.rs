@@ -12,20 +12,20 @@ pub trait Cipher {
     const MAX_NUMBER_OF_BYTES_PER_REQUEST: u32;
     const MAX_RESEED_INTERVAL: u64;
 
-    type V: AsRef<[u8]> + AsMut<[u8]>;
-    type Key;
+    type Block: AsRef<[u8]> + AsMut<[u8]>;
+    type Key: AsRef<[u8]>;
 
     type Seed: AsRef<[u8]>;
-    type Nonce;
+    type Nonce: AsRef<[u8]>;
 
     fn new(key: &Self::Key) -> Self;
+    fn block_from_slice(slice: &[u8]) -> Self::Block;
     fn key_from_slice(slice: &[u8]) -> Self::Key;
-    fn block_from_slice(slice: &[u8]) -> Self::V;
     fn seed_from_slice(slice: &[u8]) -> Self::Seed;
     fn nonce_from_slice(slice: &[u8]) -> Self::Nonce;
 
-    fn block_encrypt(&self, block: &mut Self::V);
-    fn block_encrypt_b2b(&self, block: &Self::V) -> Self::V;
+    fn block_encrypt(&self, block: &mut Self::Block);
+    fn block_encrypt_b2b(&self, block: &Self::Block) -> Self::Block;
 }
 
 macro_rules! impl_aes {
@@ -40,7 +40,7 @@ macro_rules! impl_aes {
             const MAX_NUMBER_OF_BYTES_PER_REQUEST: u32 = (1 << 19) / 8;
             const MAX_RESEED_INTERVAL: u64 = 1 << 48;
 
-            type V = aes::Block;
+            type Block = aes::Block;
             type Key = aes::cipher::Key<$inner>;
 
             type Seed = GenericArray<u8, $seed_len>;
@@ -50,11 +50,11 @@ macro_rules! impl_aes {
                 use aes::cipher::KeyInit;
                 Self($inner::new(key))
             }
+            fn block_from_slice(slice: &[u8]) -> Self::Block {
+                Self::Block::clone_from_slice(slice)
+            }
             fn key_from_slice(slice: &[u8]) -> Self::Key {
                 Self::Key::clone_from_slice(slice)
-            }
-            fn block_from_slice(slice: &[u8]) -> Self::V {
-                Self::V::clone_from_slice(slice)
             }
             fn seed_from_slice(slice: &[u8]) -> Self::Seed {
                 Self::Seed::clone_from_slice(slice)
@@ -63,13 +63,13 @@ macro_rules! impl_aes {
                 Self::Nonce::clone_from_slice(slice)
             }
 
-            fn block_encrypt(&self, block: &mut Self::V) {
+            fn block_encrypt(&self, block: &mut Self::Block) {
                 use aes::cipher::BlockEncrypt;
                 self.0.encrypt_block(block);
             }
-            fn block_encrypt_b2b(&self, block: &Self::V) -> Self::V {
+            fn block_encrypt_b2b(&self, block: &Self::Block) -> Self::Block {
                 use aes::cipher::BlockEncrypt;
-                let mut out_block = Self::V::default();
+                let mut out_block = Self::Block::default();
                 self.0.encrypt_block_b2b(block, &mut out_block);
                 out_block
             }

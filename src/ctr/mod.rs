@@ -7,7 +7,7 @@ mod util;
 pub use cipher::{Aes128, Aes192, Aes256};
 
 pub struct Ctr<C: Cipher> {
-    v: C::V,
+    v: C::Block,
     key: C::Key,
 }
 
@@ -69,7 +69,7 @@ pub struct CtrGenerateInput {
 }
 
 impl GenerateInputInit for CtrGenerateInput {
-    fn init(requested_number_of_bytes: u32, additional_input: &[u8]) -> Self {
+    fn init(requested_number_of_bytes: u32, additional_input: &[u8], _: u64) -> Self {
         Self {
             requested_number_of_bytes,
             additional_input: Vec::from(additional_input),
@@ -81,8 +81,8 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
     const MAX_RESEED_INTERVAL: u64 = C::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = C::SECURITY_STRENGTH;
 
-    type InstantiateInput = CtrInstantiateInput<cipher::Aes256>;
-    type ReseedInput = CtrReseedInput<cipher::Aes256>;
+    type InstantiateInput = CtrInstantiateInput<C>;
+    type ReseedInput = CtrReseedInput<C>;
     type GenerateInput = CtrGenerateInput;
     type GenerateError = std::convert::Infallible;
 
@@ -93,10 +93,11 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
             personalization_string,
         }: Self::InstantiateInput,
     ) -> Self {
-        let mut seed_material =
-            Vec::with_capacity(entropy_input.len() + nonce.len() + personalization_string.len());
-        seed_material.extend(entropy_input);
-        seed_material.extend(nonce);
+        let mut seed_material = Vec::with_capacity(
+            entropy_input.as_ref().len() + nonce.as_ref().len() + personalization_string.len(),
+        );
+        seed_material.extend(entropy_input.as_ref());
+        seed_material.extend(nonce.as_ref());
         seed_material.extend(personalization_string);
 
         let seed_material = util::block_cipher_df::<C>(&seed_material);
@@ -118,8 +119,9 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
             additional_input,
         }: Self::ReseedInput,
     ) {
-        let mut seed_material = Vec::with_capacity(entropy_input.len() + additional_input.len());
-        seed_material.extend(entropy_input);
+        let mut seed_material =
+            Vec::with_capacity(entropy_input.as_ref().len() + additional_input.len());
+        seed_material.extend(entropy_input.as_ref());
         seed_material.extend(additional_input);
         let seed_material = util::block_cipher_df::<C>(&seed_material);
         self.update(&seed_material);
@@ -132,8 +134,6 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
             additional_input,
         }: Self::GenerateInput,
     ) -> Result<Vec<u8>, Self::GenerateError> {
-        let requested_number_of_bytes = requested_number_of_bytes as usize;
-
         let additional_input = match additional_input.len() {
             0 => C::seed_from_slice(&vec![0; C::SEED_LEN]),
             _ => {
@@ -145,7 +145,9 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
 
         let cipher = C::new(&self.key);
 
-        let mut temp: Vec<u8> = Vec::with_capacity(C::SEED_LEN.div_ceil(C::BLOCK_LEN));
+        let requested_number_of_bytes = requested_number_of_bytes as usize;
+
+        let mut temp: Vec<u8> = Vec::with_capacity(requested_number_of_bytes);
         while temp.len() < requested_number_of_bytes {
             util::inc(self.v.as_mut());
             let output_block = cipher.block_encrypt_b2b(&self.v);

@@ -1,10 +1,9 @@
 use ctr::{Aes128, Aes192, Aes256, Ctr};
-use drbg::{
-    Drbg, DrbgError,
-    variant::{DrbgVariant, Variant},
-};
+use drbg::{Drbg, DrbgError, variant::DrbgVariant};
+use hash_based::Hash;
 use pr::{NoPr, Pr};
 use rand::rngs::OsRng;
+use sha2::Sha256;
 
 mod ctr;
 mod drbg;
@@ -16,7 +15,7 @@ pub use entropy::Entropy;
 
 macro_rules! define_drbg {
     ($name:ident, $pr:ty, $variant:ident, $inner:ident) => {
-        pub struct $name<E = OsRng>(Drbg<Variant<$pr, $variant<$inner>>, E>);
+        pub struct $name<E = OsRng>(Drbg<$pr, $variant<$inner>, E>);
 
         impl $name {
             pub fn new(personalization_string: Vec<u8>) -> Result<Self, <OsRng as Entropy>::Error> {
@@ -30,11 +29,11 @@ macro_rules! define_drbg {
             ) -> Result<
                 Vec<u8>,
                 DrbgError<
-                    <Variant<$pr, $variant<$inner>> as DrbgVariant>::GenerateError,
+                    <$variant<$inner> as DrbgVariant>::GenerateError,
                     <OsRng as Entropy>::Error,
                 >,
             > {
-                Drbg::<Variant<$pr, $variant<$inner>>, OsRng>::random_bytes(
+                Drbg::<$pr, $variant<$inner>, OsRng>::random_bytes(
                     requested_number_of_bytes,
                     personalization_string,
                     additional_input,
@@ -53,9 +52,9 @@ macro_rules! define_drbg {
                 additional_input: Vec<u8>,
             ) -> Result<
                 Vec<u8>,
-                DrbgError<<Variant<$pr, $variant<$inner>> as DrbgVariant>::GenerateError, E::Error>,
+                DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>,
             > {
-                Drbg::<Variant<$pr, $variant<$inner>>, E>::random_bytes(
+                Drbg::<$pr, $variant<$inner>, E>::random_bytes(
                     requested_number_of_bytes,
                     personalization_string,
                     additional_input,
@@ -70,7 +69,7 @@ macro_rules! define_drbg {
         }
 
         impl<E> std::ops::Deref for $name<E> {
-            type Target = Drbg<Variant<$pr, $variant<$inner>>, E>;
+            type Target = Drbg<$pr, $variant<$inner>, E>;
 
             fn deref(&self) -> &Self::Target {
                 &self.0
@@ -105,4 +104,6 @@ define_all_drbg!(
     (DrbgPrCtrAes192, Pr, Ctr, Aes192),
     (DrbgNoPrCtrAes128, NoPr, Ctr, Aes128),
     (DrbgPrCtrAes128, Pr, Ctr, Aes128),
+    (DrbgNoPrHashSha256, NoPr, Hash, Sha256),
+    (DrbgPrHashSha256, Pr, Hash, Sha256),
 );
