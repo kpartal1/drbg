@@ -64,12 +64,12 @@ impl<C: Cipher> ReseedInputInit for CtrReseedInput<C> {
 }
 
 pub struct CtrGenerateInput {
-    requested_number_of_bytes: u32,
+    requested_number_of_bytes: usize,
     additional_input: Vec<u8>,
 }
 
 impl GenerateInputInit for CtrGenerateInput {
-    fn init(requested_number_of_bytes: u32, additional_input: &[u8], _: u64) -> Self {
+    fn init(requested_number_of_bytes: usize, additional_input: &[u8], _: u64) -> Self {
         Self {
             requested_number_of_bytes,
             additional_input: Vec::from(additional_input),
@@ -144,8 +144,6 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
         };
 
         let cipher = C::new(&self.key);
-
-        let requested_number_of_bytes = requested_number_of_bytes as usize;
 
         let mut temp: Vec<u8> = Vec::with_capacity(requested_number_of_bytes);
         while temp.len() < requested_number_of_bytes {

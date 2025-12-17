@@ -10,6 +10,20 @@ pub struct Hash<F: HashFn> {
     c: F::Seed,
 }
 
+impl<F: HashFn> Hash<F> {
+    fn hashgen(&self, requested_number_of_bytes: usize) -> Vec<u8> {
+        let m = requested_number_of_bytes.div_ceil(F::BLOCK_LEN);
+        let mut data = self.v.clone();
+        let mut w = Vec::with_capacity(F::BLOCK_LEN * m);
+        for _ in 0..m {
+            let h = F::hash(data.as_ref());
+            w.extend(h.as_ref());
+            util::inc(data.as_mut());
+        }
+        Vec::from(&w[..requested_number_of_bytes])
+    }
+}
+
 pub struct HashInstantiateInput<F: HashFn> {
     entropy_input: F::Entropy,
     nonce: F::Nonce,
@@ -27,27 +41,31 @@ impl<F: HashFn> InstantiateInputInit for HashInstantiateInput<F> {
 }
 
 pub struct HashReseedInput<F: HashFn> {
-    entropy_input: F::Seed,
+    entropy_input: F::Entropy,
     additional_input: Vec<u8>,
 }
 
 impl<F: HashFn> ReseedInputInit for HashReseedInput<F> {
     fn init(entropy_input: &[u8], additional_input: &[u8]) -> Self {
         Self {
-            entropy_input: F::seed_from_slice(entropy_input),
+            entropy_input: F::entropy_from_slice(entropy_input),
             additional_input: Vec::from(additional_input),
         }
     }
 }
 
 pub struct HashGenerateInput {
-    requested_number_of_bytes: u32,
+    requested_number_of_bytes: usize,
     additional_input: Vec<u8>,
     reseed_counter: u64,
 }
 
 impl GenerateInputInit for HashGenerateInput {
-    fn init(requested_number_of_bytes: u32, additional_input: &[u8], reseed_counter: u64) -> Self {
+    fn init(
+        requested_number_of_bytes: usize,
+        additional_input: &[u8],
+        reseed_counter: u64,
+    ) -> Self {
         Self {
             requested_number_of_bytes,
             additional_input: Vec::from(additional_input),
@@ -63,7 +81,7 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
     type InstantiateInput = HashInstantiateInput<F>;
     type ReseedInput = HashReseedInput<F>;
     type GenerateInput = HashGenerateInput;
-    type GenerateError = ();
+    type GenerateError = std::convert::Infallible;
 
     fn instantiate(
         HashInstantiateInput {
@@ -133,8 +151,20 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
             data.extend(additional_input);
             let w = F::hash(data);
 
-            // how am i supposed to add v and w O_O
+            util::add(self.v.as_mut(), w.as_ref());
         }
-        todo!()
+
+        let returned_bytes = self.hashgen(requested_number_of_bytes);
+
+        let mut data = Vec::with_capacity(std::mem::size_of::<u8>() + self.v.as_ref().len());
+        data.push(0x03);
+        data.extend(self.v.as_ref());
+        let h = F::hash(data);
+
+        // Modular addition is associative.
+        util::add(self.v.as_mut(), h.as_ref());
+        util::add(self.v.as_mut(), self.c.as_ref());
+        util::add(self.v.as_mut(), &reseed_counter.to_be_bytes());
+        Ok(returned_bytes)
     }
 }

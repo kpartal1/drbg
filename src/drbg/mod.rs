@@ -71,7 +71,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
 
     pub fn get_random_bytes(
         &mut self,
-        requested_number_of_bytes: u32,
+        requested_number_of_bytes: usize,
         additional_input: Vec<u8>,
     ) -> Result<Vec<u8>, DrbgError<V::GenerateError, E::Error>> {
         let gi = <Self as DrbgVariant>::GenerateInput::init(
@@ -98,7 +98,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
     }
 
     pub fn random_bytes(
-        requested_number_of_bytes: u32,
+        requested_number_of_bytes: usize,
         personalization_string: Vec<u8>,
         additional_input: Vec<u8>,
     ) -> Result<Vec<u8>, DrbgError<V::GenerateError, E::Error>> {

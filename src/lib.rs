@@ -1,9 +1,8 @@
 use ctr::{Aes128, Aes192, Aes256, Ctr};
 use drbg::{Drbg, DrbgError, variant::DrbgVariant};
-use hash_based::Hash;
+use hash_based::{Hash, Sha256};
 use pr::{NoPr, Pr};
 use rand::rngs::OsRng;
-use sha2::Sha256;
 
 mod ctr;
 mod drbg;
@@ -23,7 +22,7 @@ macro_rules! define_drbg {
             }
 
             pub fn random_bytes(
-                requested_number_of_bytes: u32,
+                requested_number_of_bytes: usize,
                 personalization_string: Vec<u8>,
                 additional_input: Vec<u8>,
             ) -> Result<
@@ -47,7 +46,7 @@ macro_rules! define_drbg {
             }
 
             pub fn random_bytes_with_entropy(
-                requested_number_of_bytes: u32,
+                requested_number_of_bytes: usize,
                 personalization_string: Vec<u8>,
                 additional_input: Vec<u8>,
             ) -> Result<

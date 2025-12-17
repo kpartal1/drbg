@@ -9,7 +9,8 @@ pub trait ReseedInputInit {
 }
 
 pub trait GenerateInputInit {
-    fn init(requested_number_of_bytes: u32, additional_input: &[u8], reseed_counter: u64) -> Self;
+    fn init(requested_number_of_bytes: usize, additional_input: &[u8], reseed_counter: u64)
+    -> Self;
 }
 
 pub trait DrbgVariant {

@@ -14,16 +14,15 @@ pub trait Cipher {
 
     type Block: AsRef<[u8]> + AsMut<[u8]>;
     type Key: AsRef<[u8]>;
+    fn block_from_slice(slice: &[u8]) -> Self::Block;
+    fn key_from_slice(slice: &[u8]) -> Self::Key;
 
     type Seed: AsRef<[u8]>;
     type Nonce: AsRef<[u8]>;
-
-    fn new(key: &Self::Key) -> Self;
-    fn block_from_slice(slice: &[u8]) -> Self::Block;
-    fn key_from_slice(slice: &[u8]) -> Self::Key;
     fn seed_from_slice(slice: &[u8]) -> Self::Seed;
     fn nonce_from_slice(slice: &[u8]) -> Self::Nonce;
 
+    fn new(key: &Self::Key) -> Self;
     fn block_encrypt(&self, block: &mut Self::Block);
     fn block_encrypt_b2b(&self, block: &Self::Block) -> Self::Block;
 }
@@ -42,20 +41,16 @@ macro_rules! impl_aes {
 
             type Block = aes::Block;
             type Key = aes::cipher::Key<$inner>;
-
-            type Seed = GenericArray<u8, $seed_len>;
-            type Nonce = GenericArray<u8, $nonce_len>;
-
-            fn new(key: &Self::Key) -> Self {
-                use aes::cipher::KeyInit;
-                Self($inner::new(key))
-            }
             fn block_from_slice(slice: &[u8]) -> Self::Block {
                 Self::Block::clone_from_slice(slice)
             }
             fn key_from_slice(slice: &[u8]) -> Self::Key {
                 Self::Key::clone_from_slice(slice)
             }
+
+            type Seed = GenericArray<u8, $seed_len>;
+            type Nonce = GenericArray<u8, $nonce_len>;
+
             fn seed_from_slice(slice: &[u8]) -> Self::Seed {
                 Self::Seed::clone_from_slice(slice)
             }
@@ -63,6 +58,10 @@ macro_rules! impl_aes {
                 Self::Nonce::clone_from_slice(slice)
             }
 
+            fn new(key: &Self::Key) -> Self {
+                use aes::cipher::KeyInit;
+                Self($inner::new(key))
+            }
             fn block_encrypt(&self, block: &mut Self::Block) {
                 use aes::cipher::BlockEncrypt;
                 self.0.encrypt_block(block);
