@@ -1,8 +1,9 @@
 use ctr::{Aes128, Aes192, Aes256, Ctr};
 use drbg::{Drbg, DrbgError, variant::DrbgVariant};
-use hash_based::{Hash, Sha256};
+use hash_based::Hash;
 use pr::{NoPr, Pr};
 use rand::rngs::OsRng;
+use sha2::{Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256};
 
 mod ctr;
 mod drbg;
@@ -103,6 +104,16 @@ define_all_drbg!(
     (DrbgPrCtrAes192, Pr, Ctr, Aes192),
     (DrbgNoPrCtrAes128, NoPr, Ctr, Aes128),
     (DrbgPrCtrAes128, Pr, Ctr, Aes128),
+    (DrbgNoPrHashSha224, NoPr, Hash, Sha224),
+    (DrbgPrHashSha224, Pr, Hash, Sha224),
+    (DrbgNoPrHashSha512_224, NoPr, Hash, Sha512_224),
+    (DrbgPrHashSha512_224, Pr, Hash, Sha512_224),
     (DrbgNoPrHashSha256, NoPr, Hash, Sha256),
     (DrbgPrHashSha256, Pr, Hash, Sha256),
+    (DrbgNoPrHashSha512_256, NoPr, Hash, Sha512_256),
+    (DrbgPrHashSha512_256, Pr, Hash, Sha512_256),
+    (DrbgNoPrHashSha384, NoPr, Hash, Sha384),
+    (DrbgPrHashSha384, Pr, Hash, Sha384),
+    (DrbgNoPrHashSha512, NoPr, Hash, Sha512),
+    (DrbgPrHashSha512, Pr, Hash, Sha512),
 );

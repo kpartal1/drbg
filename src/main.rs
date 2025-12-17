@@ -1,4 +1,4 @@
-use drbg::{DrbgNoPrHashSha256, DrbgPrHashSha256, Entropy};
+use drbg::{DrbgNoPrHashSha512, DrbgPrHashSha512, Entropy};
 
 #[derive(Debug)]
 struct NoEntropy;
@@ -14,12 +14,12 @@ impl Entropy for NoEntropy {
 fn main() {
     println!(
         "{:?}",
-        DrbgNoPrHashSha256::<NoEntropy>::random_bytes_with_entropy(42, vec![], vec![])
+        DrbgNoPrHashSha512::<NoEntropy>::random_bytes_with_entropy(42, vec![], vec![])
     );
-    println!("{:?}", DrbgNoPrHashSha256::random_bytes(42, vec![], vec![]));
-    let mut e = DrbgNoPrHashSha256::default();
+    println!("{:?}", DrbgNoPrHashSha512::random_bytes(42, vec![], vec![]));
+    let mut e = DrbgNoPrHashSha512::default();
     println!("{:?}", e.get_random_bytes(42, vec![]));
-    match DrbgPrHashSha256::new(vec![]) {
+    match DrbgPrHashSha512::new(vec![]) {
         Ok(mut drbg) => {
             for _ in 0..10 {
                 match drbg.get_random_bytes(1 << 4, vec![]) {
