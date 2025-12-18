@@ -54,33 +54,29 @@ impl<F: HashFn> ReseedInputInit for HashReseedInput<F> {
     }
 }
 
-pub struct HashGenerateInput {
-    requested_number_of_bytes: usize,
-    additional_input: Vec<u8>,
+pub struct HashGenerateInput<'a> {
+    buf: &'a mut [u8],
+    additional_input: &'a [u8],
     reseed_counter: u64,
 }
 
-impl GenerateInputInit for HashGenerateInput {
-    fn init(
-        requested_number_of_bytes: usize,
-        additional_input: &[u8],
-        reseed_counter: u64,
-    ) -> Self {
+impl<'a> GenerateInputInit<'a> for HashGenerateInput<'a> {
+    fn init(buf: &'a mut [u8], additional_input: &'a [u8], reseed_counter: u64) -> Self {
         Self {
-            requested_number_of_bytes,
-            additional_input: Vec::from(additional_input),
+            buf,
+            additional_input,
             reseed_counter,
         }
     }
 }
 
-impl<F: HashFn> DrbgVariant for Hash<F> {
+impl<'a, F: HashFn> DrbgVariant<'a> for Hash<F> {
     const MAX_RESEED_INTERVAL: u64 = 1 << 48;
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
     type InstantiateInput = HashInstantiateInput<F>;
     type ReseedInput = HashReseedInput<F>;
-    type GenerateInput = HashGenerateInput;
+    type GenerateInput = HashGenerateInput<'a>;
     type GenerateError = std::convert::Infallible;
 
     fn instantiate(
@@ -137,24 +133,24 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
     fn generate(
         &mut self,
         HashGenerateInput {
-            requested_number_of_bytes,
+            buf,
             additional_input,
             reseed_counter,
-        }: Self::GenerateInput,
-    ) -> Result<Vec<u8>, Self::GenerateError> {
+        }: &mut Self::GenerateInput,
+    ) -> Result<(), Self::GenerateError> {
         if !additional_input.is_empty() {
             let mut data = Vec::with_capacity(
                 std::mem::size_of::<u8>() + self.v.as_ref().len() + additional_input.len(),
             );
             data.push(0x02);
             data.extend(self.v.as_ref());
-            data.extend(additional_input);
+            data.extend(additional_input.iter());
             let w = F::hash(data);
 
             util::add(self.v.as_mut(), w.as_ref());
         }
 
-        let returned_bytes = self.hashgen(requested_number_of_bytes);
+        // let returned_bytes = self.hashgen(buf.len());
 
         let mut data = Vec::with_capacity(std::mem::size_of::<u8>() + self.v.as_ref().len());
         data.push(0x03);
@@ -165,6 +161,7 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
         util::add(self.v.as_mut(), h.as_ref());
         util::add(self.v.as_mut(), self.c.as_ref());
         util::add(self.v.as_mut(), &reseed_counter.to_be_bytes());
-        Ok(returned_bytes)
+        // Ok(returned_bytes)
+        Ok(())
     }
 }

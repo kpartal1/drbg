@@ -13,82 +13,115 @@ mod pr;
 
 pub use entropy::Entropy;
 
-macro_rules! define_drbg {
-    ($name:ident, $pr:ty, $variant:ident, $inner:ident) => {
-        pub struct $name<E = OsRng>(Drbg<$pr, $variant<$inner>, E>);
+macro_rules! define_reseed_interval {
+    ($builder:ident, NoPr) => {
+        impl<'a, E> $builder<'a, E> {
+            pub fn reseed_interval(mut self, reseed_interval: u64) -> Self {
+                self.reseed_interval = Some(reseed_interval);
+                self
+            }
+        }
+    };
+    ($builder:ident, Pr) => {};
+}
 
-        impl $name {
-            pub fn new(personalization_string: Vec<u8>) -> Result<Self, <OsRng as Entropy>::Error> {
-                Drbg::new(personalization_string).map(Self)
+macro_rules! define_drbg_builder {
+    ($name:ident, $builder:ident, $pr:tt, $variant:ident, $inner:ident) => {
+        pub struct $builder<'a, E> {
+            personalization_string: &'a [u8],
+            reseed_interval: Option<u64>,
+            additional_input: &'a [u8],
+            entropy: std::marker::PhantomData<E>,
+        }
+
+        impl<'a, E> $builder<'a, E> {
+            pub fn personalization_string(mut self, p: &'a [u8]) -> Self {
+                self.personalization_string = p;
+                self
+            }
+
+            pub fn additional_input(mut self, p: &'a [u8]) -> Self {
+                self.additional_input = p;
+                self
+            }
+
+            pub fn entropy<En>(self) -> $builder<'a, En> {
+                $builder {
+                    personalization_string: self.personalization_string,
+                    reseed_interval: self.reseed_interval,
+                    additional_input: self.additional_input,
+                    entropy: std::marker::PhantomData::<En>,
+                }
+            }
+        }
+
+        impl<'a, E: Entropy> $builder<'a, E> {
+            pub fn build(self) -> Result<$name<'a, E>, E::Error> {
+                let mut drbg = Drbg::<$pr, $variant<$inner>, E>::new(self.personalization_string)?;
+
+                if let Some(reseed_interval) = self.reseed_interval {
+                    drbg.set_reseed_interval(reseed_interval);
+                }
+
+                Ok($name(drbg))
             }
 
             pub fn random_bytes(
-                requested_number_of_bytes: usize,
-                personalization_string: Vec<u8>,
-                additional_input: Vec<u8>,
+                self,
+                buf: &mut [u8],
             ) -> Result<
-                Vec<u8>,
-                DrbgError<
-                    <$variant<$inner> as DrbgVariant>::GenerateError,
-                    <OsRng as Entropy>::Error,
-                >,
+                (),
+                DrbgError<<$variant<'a, $inner> as DrbgVariant<'a>>::GenerateError, E::Error>,
             > {
-                Drbg::<$pr, $variant<$inner>, OsRng>::random_bytes(
-                    requested_number_of_bytes,
-                    personalization_string,
-                    additional_input,
-                )
+                let additional_input = self.additional_input.clone();
+                self.build()
+                    .map_err(DrbgError::EntropyError)?
+                    .get_random_bytes(buf, additional_input)
             }
         }
 
-        impl<E: Entropy> $name<E> {
-            pub fn new_with_entropy(personalization_string: Vec<u8>) -> Result<Self, E::Error> {
-                Drbg::new(personalization_string).map(Self)
-            }
+        define_reseed_interval!($builder, $pr);
+    };
+}
 
-            pub fn random_bytes_with_entropy(
-                requested_number_of_bytes: usize,
-                personalization_string: Vec<u8>,
-                additional_input: Vec<u8>,
+macro_rules! define_drbg {
+    ($name:ident, $builder:ident, $pr:tt, $variant:ident, $inner:ident) => {
+        pub struct $name<'a, E = OsRng>(Drbg<$pr, $variant<'a, $inner>, E>);
+
+        impl<'a> $name<'a> {
+            pub fn builder() -> $builder<'a, OsRng> {
+                $builder {
+                    personalization_string: &[],
+                    reseed_interval: None,
+                    additional_input: &[],
+                    entropy: std::marker::PhantomData,
+                }
+            }
+        }
+
+        impl<'a, E: Entropy> $name<'a, E> {
+            pub fn get_random_bytes(
+                &mut self,
+                buf: &'a mut [u8],
+                additional_input: &'a [u8],
             ) -> Result<
-                Vec<u8>,
-                DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>,
+                (),
+                DrbgError<<$variant<'a, $inner> as DrbgVariant<'a>>::GenerateError, E::Error>,
             > {
-                Drbg::<$pr, $variant<$inner>, E>::random_bytes(
-                    requested_number_of_bytes,
-                    personalization_string,
-                    additional_input,
-                )
+                self.0.get_random_bytes(buf, additional_input)
             }
         }
 
-        impl Default for $name {
-            fn default() -> Self {
-                $name::new(vec![]).unwrap()
-            }
-        }
-
-        impl<E> std::ops::Deref for $name<E> {
-            type Target = Drbg<$pr, $variant<$inner>, E>;
-
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
-
-        impl<E> std::ops::DerefMut for $name<E> {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                &mut self.0
-            }
-        }
+        define_drbg_builder!($name, $builder, $pr, $variant, $inner);
     };
 }
 
 macro_rules! define_all_drbg {
-    ($(($name:ident, $pr:ty, $variant:ident, $inner:ident)),*$(,)?) => {
+    ($(($name:ident, $builder:ident, $pr:tt, $variant:ident, $inner:ident)),*$(,)?) => {
         $(
             define_drbg!(
                 $name,
+                $builder,
                 $pr,
                 $variant,
                 $inner
@@ -98,34 +131,82 @@ macro_rules! define_all_drbg {
 }
 
 define_all_drbg!(
-    (DrbgNoPrCtrAes256, NoPr, Ctr, Aes256),
-    (DrbgPrCtrAes256, Pr, Ctr, Aes256),
-    (DrbgNoPrCtrAes192, NoPr, Ctr, Aes192),
-    (DrbgPrCtrAes192, Pr, Ctr, Aes192),
-    (DrbgNoPrCtrAes128, NoPr, Ctr, Aes128),
-    (DrbgPrCtrAes128, Pr, Ctr, Aes128),
-    (DrbgNoPrHashSha224, NoPr, Hash, Sha224),
-    (DrbgPrHashSha224, Pr, Hash, Sha224),
-    (DrbgNoPrHashSha512_224, NoPr, Hash, Sha512_224),
-    (DrbgPrHashSha512_224, Pr, Hash, Sha512_224),
-    (DrbgNoPrHashSha256, NoPr, Hash, Sha256),
-    (DrbgPrHashSha256, Pr, Hash, Sha256),
-    (DrbgNoPrHashSha512_256, NoPr, Hash, Sha512_256),
-    (DrbgPrHashSha512_256, Pr, Hash, Sha512_256),
-    (DrbgNoPrHashSha384, NoPr, Hash, Sha384),
-    (DrbgPrHashSha384, Pr, Hash, Sha384),
-    (DrbgNoPrHashSha512, NoPr, Hash, Sha512),
-    (DrbgPrHashSha512, Pr, Hash, Sha512),
-    (DrbgNoPrHmacSha224, NoPr, Hmac, Sha224),
-    (DrbgPrHmacSha224, Pr, Hmac, Sha224),
-    (DrbgNoPrHmacSha512_224, NoPr, Hmac, Sha512_224),
-    (DrbgPrHmacSha512_224, Pr, Hmac, Sha512_224),
-    (DrbgNoPrHmacSha256, NoPr, Hmac, Sha256),
-    (DrbgPrHmacSha256, Pr, Hmac, Sha256),
-    (DrbgNoPrHmacSha512_256, NoPr, Hmac, Sha512_256),
-    (DrbgPrHmacSha512_256, Pr, Hmac, Sha512_256),
-    (DrbgNoPrHmacSha384, NoPr, Hmac, Sha384),
-    (DrbgPrHmacSha384, Pr, Hmac, Sha384),
-    (DrbgNoPrHmacSha512, NoPr, Hmac, Sha512),
-    (DrbgPrHmacSha512, Pr, Hmac, Sha512),
+    (DrbgCtrAes256, DrbgCtrAes256Builder, NoPr, Ctr, Aes256),
+    (DrbgPrCtrAes256, DrbgPrCtrAes256Builder, Pr, Ctr, Aes256),
+    (DrbgCtrAes192, DrbgCtrAes192Builder, NoPr, Ctr, Aes192),
+    (DrbgPrCtrAes192, DrbgPrCtrAes192Builder, Pr, Ctr, Aes192),
+    (DrbgCtrAes128, DrbgCtrAes128Builder, NoPr, Ctr, Aes128),
+    (DrbgPrCtrAes128, DrbgPrCtrAes128Builder, Pr, Ctr, Aes128),
+    // (DrbgHashSha224, DrbgHashSha224Builder, NoPr, Hash, Sha224),
+    // (DrbgPrHashSha224, DrbgPrHashSha224Builder, Pr, Hash, Sha224),
+    // (
+    //     DrbgHashSha512_224,
+    //     DrbgHashSha512_224Builder,
+    //     NoPr,
+    //     Hash,
+    //     Sha512_224
+    // ),
+    // (
+    //     DrbgPrHashSha512_224,
+    //     DrbgPrHashSha512_224Builder,
+    //     Pr,
+    //     Hash,
+    //     Sha512_224
+    // ),
+    // (DrbgHashSha256, DrbgHashSha256Builder, NoPr, Hash, Sha256),
+    // (DrbgPrHashSha256, DrbgPrHashSha256Builder, Pr, Hash, Sha256),
+    // (
+    //     DrbgHashSha512_256,
+    //     DrbgHashSha512_256Builder,
+    //     NoPr,
+    //     Hash,
+    //     Sha512_256
+    // ),
+    // (
+    //     DrbgPrHashSha512_256,
+    //     DrbgPrHashSha512_256Builder,
+    //     Pr,
+    //     Hash,
+    //     Sha512_256
+    // ),
+    // (DrbgHashSha384, DrbgHashSha384Builder, NoPr, Hash, Sha384),
+    // (DrbgPrHashSha384, DrbgPrHashSha384Builder, Pr, Hash, Sha384),
+    // (DrbgHashSha512, DrbgHashSha512Builder, NoPr, Hash, Sha512),
+    // (DrbgPrHashSha512, DrbgPrHashSha512Builder, Pr, Hash, Sha512),
+    // (DrbgHmacSha224, DrbgHmacSha224Builder, NoPr, Hmac, Sha224),
+    // (DrbgPrHmacSha224, DrbgPrHmacSha224Builder, Pr, Hmac, Sha224),
+    // (
+    //     DrbgHmacSha512_224,
+    //     DrbgHmacSha512_224Builder,
+    //     NoPr,
+    //     Hmac,
+    //     Sha512_224
+    // ),
+    // (
+    //     DrbgPrHmacSha512_224,
+    //     DrbgPrHmacSha512_224Builder,
+    //     Pr,
+    //     Hmac,
+    //     Sha512_224
+    // ),
+    // (DrbgHmacSha256, DrbgHmacSha256Builder, NoPr, Hmac, Sha256),
+    // (DrbgPrHmacSha256, DrbgPrHmacSha256Builder, Pr, Hmac, Sha256),
+    // (
+    //     DrbgHmacSha512_256,
+    //     DrbgHmacSha512_256Builder,
+    //     NoPr,
+    //     Hmac,
+    //     Sha512_256
+    // ),
+    // (
+    //     DrbgPrHmacSha512_256,
+    //     DrbgPrHmacSha512_256Builder,
+    //     Pr,
+    //     Hmac,
+    //     Sha512_256
+    // ),
+    // (DrbgHmacSha384, DrbgHmacSha384Builder, NoPr, Hmac, Sha384),
+    // (DrbgPrHmacSha384, DrbgPrHmacSha384Builder, Pr, Hmac, Sha384),
+    // (DrbgHmacSha512, DrbgHmacSha512Builder, NoPr, Hmac, Sha512),
+    // (DrbgPrHmacSha512, DrbgPrHmacSha512Builder, Pr, Hmac, Sha512),
 );

@@ -8,12 +8,11 @@ pub trait ReseedInputInit {
     fn init(entropy_input: &[u8], additional_input: &[u8]) -> Self;
 }
 
-pub trait GenerateInputInit {
-    fn init(requested_number_of_bytes: usize, additional_input: &[u8], reseed_counter: u64)
-    -> Self;
+pub trait GenerateInputInit<'a> {
+    fn init(buf: &'a mut [u8], additional_input: &'a [u8], reseed_counter: u64) -> Self;
 }
 
-pub trait DrbgVariant {
+pub trait DrbgVariant<'a> {
     const MAX_RESEED_INTERVAL: u64;
     const SECURITY_STRENGTH: usize;
 
@@ -24,10 +23,10 @@ pub trait DrbgVariant {
 
     type InstantiateInput: InstantiateInputInit;
     type ReseedInput: ReseedInputInit;
-    type GenerateInput: GenerateInputInit;
+    type GenerateInput: GenerateInputInit<'a>;
     type GenerateError: Debug;
 
     fn instantiate(input: Self::InstantiateInput) -> Self;
     fn reseed(&mut self, input: Self::ReseedInput);
-    fn generate(&mut self, input: Self::GenerateInput) -> Result<Vec<u8>, Self::GenerateError>;
+    fn generate(&mut self, input: &mut Self::GenerateInput) -> Result<(), Self::GenerateError>;
 }

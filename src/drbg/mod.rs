@@ -17,11 +17,14 @@ pub enum DrbgError<V, E> {
 pub struct Drbg<Pr, V, E> {
     variant: V,
     reseed_counter: u64,
+    reseed_interval: u64,
     _pr: PhantomData<Pr>,
     _entropy: PhantomData<E>,
 }
 
-impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> DrbgVariant for Drbg<Pr, V, E> {
+impl<'a, Pr: PredictionResistance, V: DrbgVariant<'a>, E: Entropy> DrbgVariant<'a>
+    for Drbg<Pr, V, E>
+{
     const MAX_RESEED_INTERVAL: u64 = V::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = V::SECURITY_STRENGTH;
 
@@ -34,6 +37,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> DrbgVariant for Drbg<
         Self {
             variant: V::instantiate(input),
             reseed_counter: 1,
+            reseed_interval: V::MAX_RESEED_INTERVAL,
             _pr: PhantomData,
             _entropy: PhantomData,
         }
@@ -42,21 +46,24 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> DrbgVariant for Drbg<
         self.variant.reseed(input);
         self.reseed_counter = 1;
     }
-    fn generate(&mut self, input: Self::GenerateInput) -> Result<Vec<u8>, Self::GenerateError> {
+    fn generate(&mut self, input: &mut Self::GenerateInput) -> Result<(), Self::GenerateError> {
         if Pr::must_reseed(self.reseed_counter, V::MAX_RESEED_INTERVAL) {
             return Err(DrbgError::ReseedRequired);
         }
-        let res = self
-            .variant
+        self.variant
             .generate(input)
             .map_err(DrbgError::GenerateError)?;
         self.reseed_counter += 1;
-        Ok(res)
+        Ok(())
     }
 }
 
-impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
-    pub fn new(personalization_string: Vec<u8>) -> Result<Self, E::Error> {
+impl<'a, Pr: PredictionResistance, V: DrbgVariant<'a>, E: Entropy> Drbg<Pr, V, E> {
+    pub fn set_reseed_interval(&mut self, reseed_interval: u64) {
+        self.reseed_interval = reseed_interval;
+    }
+
+    pub fn new(personalization_string: &[u8]) -> Result<Self, E::Error> {
         let mut entropy_input = vec![0; Self::MIN_ENTROPY];
         E::try_fill_bytes(&mut entropy_input)?;
         let mut nonce = vec![0; Self::SECURITY_STRENGTH / 2];
@@ -64,59 +71,31 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         let ii = <Self as DrbgVariant>::InstantiateInput::init(
             &entropy_input,
             &nonce,
-            &personalization_string,
+            personalization_string,
         );
         Ok(<Self as DrbgVariant>::instantiate(ii))
     }
 
     pub fn get_random_bytes(
         &mut self,
-        requested_number_of_bytes: usize,
-        additional_input: Vec<u8>,
-    ) -> Result<Vec<u8>, DrbgError<V::GenerateError, E::Error>> {
-        let gi = <Self as DrbgVariant>::GenerateInput::init(
-            requested_number_of_bytes,
-            &additional_input,
+        buf: &'a mut [u8],
+        additional_input: &'a [u8],
+    ) -> Result<(), DrbgError<V::GenerateError, E::Error>> {
+        let mut gi = <Self as DrbgVariant<'a>>::GenerateInput::init(
+            buf,
+            additional_input,
             self.reseed_counter,
         );
-        match self.generate(gi) {
+        match self.generate(&mut gi) {
             Ok(block) => Ok(block),
-            Err(_) => {
+            Err(DrbgError::ReseedRequired) => {
                 let mut entropy_input = vec![0; V::MIN_ENTROPY];
                 E::try_fill_bytes(&mut entropy_input).map_err(DrbgError::EntropyError)?;
-                let ri =
-                    <Self as DrbgVariant>::ReseedInput::init(&entropy_input, &additional_input);
+                let ri = <Self as DrbgVariant>::ReseedInput::init(&entropy_input, additional_input);
                 self.reseed(ri);
-                let gi = <Self as DrbgVariant>::GenerateInput::init(
-                    requested_number_of_bytes,
-                    &additional_input,
-                    self.reseed_counter,
-                );
-                Ok(self.generate(gi)?)
+                Ok(self.generate(&mut gi)?)
             }
+            Err(e) => Err(e),
         }
-    }
-
-    pub fn random_bytes(
-        requested_number_of_bytes: usize,
-        personalization_string: Vec<u8>,
-        additional_input: Vec<u8>,
-    ) -> Result<Vec<u8>, DrbgError<V::GenerateError, E::Error>> {
-        let mut entropy_input = vec![0; V::MIN_ENTROPY];
-        E::try_fill_bytes(&mut entropy_input).map_err(DrbgError::EntropyError)?;
-        let mut nonce = vec![0; V::SECURITY_STRENGTH / 2];
-        E::try_fill_bytes(&mut nonce).map_err(DrbgError::EntropyError)?;
-        let ii = <Self as DrbgVariant>::InstantiateInput::init(
-            &entropy_input,
-            &nonce,
-            &personalization_string,
-        );
-        let mut drbg = Self::instantiate(ii);
-        let gi = <Self as DrbgVariant>::GenerateInput::init(
-            requested_number_of_bytes,
-            &additional_input,
-            drbg.reseed_counter,
-        );
-        drbg.generate(gi)
     }
 }

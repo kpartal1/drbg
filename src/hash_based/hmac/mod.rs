@@ -62,27 +62,27 @@ impl<F: HashFn> ReseedInputInit for HmacReseedInput<F> {
     }
 }
 
-pub struct HmacGenerateInput {
-    requested_number_of_bytes: usize,
+pub struct HmacGenerateInput<'a> {
+    buf: &'a mut [u8],
     additional_input: Vec<u8>,
 }
 
-impl GenerateInputInit for HmacGenerateInput {
-    fn init(requested_number_of_bytes: usize, additional_input: &[u8], _: u64) -> Self {
+impl<'a> GenerateInputInit<'a> for HmacGenerateInput<'a> {
+    fn init(buf: &'a mut [u8], additional_input: &[u8], _: u64) -> Self {
         Self {
-            requested_number_of_bytes,
+            buf,
             additional_input: Vec::from(additional_input),
         }
     }
 }
 
-impl<F: HashFn> DrbgVariant for Hmac<F> {
+impl<'a, F: HashFn> DrbgVariant<'a> for Hmac<F> {
     const MAX_RESEED_INTERVAL: u64 = F::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
     type InstantiateInput = HmacInstantiateInput<F>;
     type ReseedInput = HmacReseedInput<F>;
-    type GenerateInput = HmacGenerateInput;
+    type GenerateInput = HmacGenerateInput<'a>;
     type GenerateError = std::convert::Infallible;
 
     fn instantiate(
@@ -123,19 +123,20 @@ impl<F: HashFn> DrbgVariant for Hmac<F> {
     fn generate(
         &mut self,
         HmacGenerateInput {
-            requested_number_of_bytes,
+            buf,
             additional_input,
-        }: Self::GenerateInput,
-    ) -> Result<Vec<u8>, Self::GenerateError> {
+        }: &mut Self::GenerateInput,
+    ) -> Result<(), Self::GenerateError> {
         if !additional_input.is_empty() {
-            self.update(&additional_input);
+            self.update(additional_input);
         }
-        let mut temp = Vec::with_capacity(requested_number_of_bytes);
-        while temp.len() < requested_number_of_bytes {
+        let mut temp: Vec<u8> = Vec::with_capacity(buf.len());
+        while temp.len() < buf.len() {
             self.v = F::hmac(&self.key, self.v.as_ref());
             temp.extend(self.v.as_ref());
         }
-        self.update(&additional_input);
-        Ok(Vec::from(&temp[..requested_number_of_bytes]))
+        self.update(additional_input);
+        // Ok(Vec::from(&temp[..buf.len()]))
+        Ok(())
     }
 }

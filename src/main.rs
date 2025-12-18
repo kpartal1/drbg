@@ -1,4 +1,4 @@
-use drbg::{DrbgNoPrHmacSha512, DrbgPrHmacSha512, Entropy};
+use drbg::{DrbgCtrAes256, DrbgPrCtrDrbgCtrAes256, Entropy};
 
 #[derive(Debug)]
 struct NoEntropy;
@@ -12,20 +12,22 @@ impl Entropy for NoEntropy {
 }
 
 fn main() {
+    let mut bytes = [0; 1 << 5];
     println!(
-        "{:?}",
-        DrbgNoPrHmacSha512::<NoEntropy>::random_bytes_with_entropy(42, vec![], vec![])
+        "one-shot: {:?}",
+        DrbgCtrAes256::builder()
+            .entropy::<NoEntropy>()
+            .random_bytes(&mut bytes)
     );
-    println!("{:?}", DrbgNoPrHmacSha512::random_bytes(42, vec![], vec![]));
-    let mut e = DrbgNoPrHmacSha512::default();
-    println!("{:?}", e.get_random_bytes(42, vec![]));
-    match DrbgPrHmacSha512::new(vec![]) {
+    let drbg = DrbgCtrAes256::builder().entropy::<NoEntropy>().build();
+    match drbg {
         Ok(mut drbg) => {
             for _ in 0..10 {
-                match drbg.get_random_bytes(1 << 4, vec![]) {
-                    Ok(bytes) => println!("random bytes: {bytes:?}"),
-                    Err(e) => println!("errro: {e:?}"),
-                }
+                let mut bytes = [0; 1 << 4];
+                drbg.get_random_bytes(&mut bytes, &[]).unwrap_or_else(|e| {
+                    println!("{e:?}");
+                });
+                println!("{bytes:?}");
             }
         }
         Err(e) => println!("{e:?}"),

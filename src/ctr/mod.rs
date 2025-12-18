@@ -6,12 +6,13 @@ mod util;
 
 pub use cipher::{Aes128, Aes192, Aes256};
 
-pub struct Ctr<C: Cipher> {
+pub struct Ctr<'a, C: Cipher> {
     v: C::Block,
     key: C::Key,
+    _lifetime: &'a (),
 }
 
-impl<C: Cipher> Ctr<C> {
+impl<'a, C: Cipher> Ctr<'a, C> {
     pub fn update(&mut self, provided_data: &C::Seed) {
         let cipher = C::new(&self.key);
 
@@ -63,27 +64,27 @@ impl<C: Cipher> ReseedInputInit for CtrReseedInput<C> {
     }
 }
 
-pub struct CtrGenerateInput {
-    requested_number_of_bytes: usize,
-    additional_input: Vec<u8>,
+pub struct CtrGenerateInput<'a> {
+    buf: &'a mut [u8],
+    additional_input: &'a [u8],
 }
 
-impl GenerateInputInit for CtrGenerateInput {
-    fn init(requested_number_of_bytes: usize, additional_input: &[u8], _: u64) -> Self {
+impl<'a> GenerateInputInit<'a> for CtrGenerateInput<'a> {
+    fn init(buf: &'a mut [u8], additional_input: &'a [u8], _: u64) -> Self {
         Self {
-            requested_number_of_bytes,
-            additional_input: Vec::from(additional_input),
+            buf,
+            additional_input,
         }
     }
 }
 
-impl<C: Cipher> DrbgVariant for Ctr<C> {
+impl<'a, C: Cipher> DrbgVariant<'a> for Ctr<'a, C> {
     const MAX_RESEED_INTERVAL: u64 = C::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = C::SECURITY_STRENGTH;
 
     type InstantiateInput = CtrInstantiateInput<C>;
     type ReseedInput = CtrReseedInput<C>;
-    type GenerateInput = CtrGenerateInput;
+    type GenerateInput = CtrGenerateInput<'a>;
     type GenerateError = std::convert::Infallible;
 
     fn instantiate(
@@ -105,6 +106,7 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
         let mut ret = Self {
             v: C::block_from_slice(&vec![0; C::BLOCK_LEN]),
             key: C::key_from_slice(&vec![0; C::KEY_LEN]),
+            _lifetime: &(),
         };
 
         ret.update(&seed_material);
@@ -130,14 +132,14 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
     fn generate(
         &mut self,
         CtrGenerateInput {
-            requested_number_of_bytes,
+            buf,
             additional_input,
-        }: Self::GenerateInput,
-    ) -> Result<Vec<u8>, Self::GenerateError> {
+        }: &mut Self::GenerateInput,
+    ) -> Result<(), Self::GenerateError> {
         let additional_input = match additional_input.len() {
             0 => C::seed_from_slice(&vec![0; C::SEED_LEN]),
             _ => {
-                let additional_input = util::block_cipher_df::<C>(&additional_input);
+                let additional_input = util::block_cipher_df::<C>(additional_input);
                 self.update(&additional_input);
                 additional_input
             }
@@ -145,15 +147,21 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
 
         let cipher = C::new(&self.key);
 
-        let mut temp: Vec<u8> = Vec::with_capacity(requested_number_of_bytes);
-        while temp.len() < requested_number_of_bytes {
+        for block in buf.chunks_mut(self.v.as_ref().len()) {
             util::inc(self.v.as_mut());
             let output_block = cipher.block_encrypt_b2b(&self.v);
-            temp.extend(output_block.as_ref());
+            block.copy_from_slice(output_block.as_ref());
         }
+
+        // let mut temp: Vec<u8> = Vec::with_capacity(buf.len());
+        // while temp.len() < buf.len() {
+        //     util::inc(self.v.as_mut());
+        //     let output_block = cipher.block_encrypt_b2b(&self.v);
+        //     temp.extend(output_block.as_ref());
+        // }
 
         self.update(&additional_input);
 
-        Ok(Vec::from(&temp[..requested_number_of_bytes]))
+        Ok(())
     }
 }
