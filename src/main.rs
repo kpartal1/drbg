@@ -1,4 +1,4 @@
-use drbg::{DrbgCtrAes256, DrbgPrCtrDrbgCtrAes256, Entropy};
+use drbg::{DrbgCtrAes256, DrbgPrCtrAes256, Entropy};
 
 #[derive(Debug)]
 struct NoEntropy;
@@ -13,13 +13,11 @@ impl Entropy for NoEntropy {
 
 fn main() {
     let mut bytes = [0; 1 << 5];
-    println!(
-        "one-shot: {:?}",
-        DrbgCtrAes256::builder()
-            .entropy::<NoEntropy>()
-            .random_bytes(&mut bytes)
-    );
-    let drbg = DrbgCtrAes256::builder().entropy::<NoEntropy>().build();
+    let _ = DrbgCtrAes256::builder()
+        .entropy::<NoEntropy>()
+        .random_bytes(&mut bytes, &[]);
+    println!("one-shot: {bytes:?}");
+    let drbg = DrbgPrCtrAes256::builder().entropy::<NoEntropy>().build();
     match drbg {
         Ok(mut drbg) => {
             for _ in 0..10 {

@@ -1,4 +1,4 @@
-use crate::drbg::variant::{DrbgVariant, GenerateInputInit, InstantiateInputInit, ReseedInputInit};
+use crate::drbg::variant::DrbgVariant;
 use cipher::Cipher;
 
 mod cipher;
@@ -6,13 +6,12 @@ mod util;
 
 pub use cipher::{Aes128, Aes192, Aes256};
 
-pub struct Ctr<'a, C: Cipher> {
+pub struct Ctr<C: Cipher> {
     v: C::Block,
     key: C::Key,
-    _lifetime: &'a (),
 }
 
-impl<'a, C: Cipher> Ctr<'a, C> {
+impl<C: Cipher> Ctr<C> {
     pub fn update(&mut self, provided_data: &C::Seed) {
         let cipher = C::new(&self.key);
 
@@ -34,71 +33,15 @@ impl<'a, C: Cipher> Ctr<'a, C> {
     }
 }
 
-pub struct CtrInstantiateInput<C: Cipher> {
-    entropy_input: C::Key,
-    nonce: C::Nonce,
-    personalization_string: Vec<u8>,
-}
-
-impl<C: Cipher> InstantiateInputInit for CtrInstantiateInput<C> {
-    fn init(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
-        Self {
-            entropy_input: C::key_from_slice(entropy_input),
-            nonce: C::nonce_from_slice(nonce),
-            personalization_string: Vec::from(personalization_string),
-        }
-    }
-}
-
-pub struct CtrReseedInput<C: Cipher> {
-    entropy_input: C::Key,
-    additional_input: Vec<u8>,
-}
-
-impl<C: Cipher> ReseedInputInit for CtrReseedInput<C> {
-    fn init(entropy_input: &[u8], additional_input: &[u8]) -> Self {
-        Self {
-            entropy_input: C::key_from_slice(entropy_input),
-            additional_input: Vec::from(additional_input),
-        }
-    }
-}
-
-pub struct CtrGenerateInput<'a> {
-    buf: &'a mut [u8],
-    additional_input: &'a [u8],
-}
-
-impl<'a> GenerateInputInit<'a> for CtrGenerateInput<'a> {
-    fn init(buf: &'a mut [u8], additional_input: &'a [u8], _: u64) -> Self {
-        Self {
-            buf,
-            additional_input,
-        }
-    }
-}
-
-impl<'a, C: Cipher> DrbgVariant<'a> for Ctr<'a, C> {
+impl<C: Cipher> DrbgVariant for Ctr<C> {
     const MAX_RESEED_INTERVAL: u64 = C::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = C::SECURITY_STRENGTH;
 
-    type InstantiateInput = CtrInstantiateInput<C>;
-    type ReseedInput = CtrReseedInput<C>;
-    type GenerateInput = CtrGenerateInput<'a>;
-    type GenerateError = std::convert::Infallible;
-
-    fn instantiate(
-        CtrInstantiateInput {
-            entropy_input,
-            nonce,
-            personalization_string,
-        }: Self::InstantiateInput,
-    ) -> Self {
-        let mut seed_material = Vec::with_capacity(
-            entropy_input.as_ref().len() + nonce.as_ref().len() + personalization_string.len(),
-        );
-        seed_material.extend(entropy_input.as_ref());
-        seed_material.extend(nonce.as_ref());
+    fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
+        let mut seed_material =
+            Vec::with_capacity(entropy_input.len() + nonce.len() + personalization_string.len());
+        seed_material.extend(entropy_input);
+        seed_material.extend(nonce);
         seed_material.extend(personalization_string);
 
         let seed_material = util::block_cipher_df::<C>(&seed_material);
@@ -106,7 +49,6 @@ impl<'a, C: Cipher> DrbgVariant<'a> for Ctr<'a, C> {
         let mut ret = Self {
             v: C::block_from_slice(&vec![0; C::BLOCK_LEN]),
             key: C::key_from_slice(&vec![0; C::KEY_LEN]),
-            _lifetime: &(),
         };
 
         ret.update(&seed_material);
@@ -114,27 +56,20 @@ impl<'a, C: Cipher> DrbgVariant<'a> for Ctr<'a, C> {
         ret
     }
 
-    fn reseed(
-        &mut self,
-        CtrReseedInput {
-            entropy_input,
-            additional_input,
-        }: Self::ReseedInput,
-    ) {
-        let mut seed_material =
-            Vec::with_capacity(entropy_input.as_ref().len() + additional_input.len());
-        seed_material.extend(entropy_input.as_ref());
+    fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
+        let mut seed_material = Vec::with_capacity(entropy_input.len() + additional_input.len());
+        seed_material.extend(entropy_input);
         seed_material.extend(additional_input);
         let seed_material = util::block_cipher_df::<C>(&seed_material);
         self.update(&seed_material);
     }
 
+    type GenerateError = std::convert::Infallible;
     fn generate(
         &mut self,
-        CtrGenerateInput {
-            buf,
-            additional_input,
-        }: &mut Self::GenerateInput,
+        buf: &mut [u8],
+        additional_input: &[u8],
+        _: u64,
     ) -> Result<(), Self::GenerateError> {
         let additional_input = match additional_input.len() {
             0 => C::seed_from_slice(&vec![0; C::SEED_LEN]),

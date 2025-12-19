@@ -18,9 +18,7 @@ pub trait Cipher {
     fn key_from_slice(slice: &[u8]) -> Self::Key;
 
     type Seed: AsRef<[u8]>;
-    type Nonce: AsRef<[u8]>;
     fn seed_from_slice(slice: &[u8]) -> Self::Seed;
-    fn nonce_from_slice(slice: &[u8]) -> Self::Nonce;
 
     fn new(key: &Self::Key) -> Self;
     fn block_encrypt(&self, block: &mut Self::Block);
@@ -49,13 +47,9 @@ macro_rules! impl_aes {
             }
 
             type Seed = GenericArray<u8, $seed_len>;
-            type Nonce = GenericArray<u8, $nonce_len>;
 
             fn seed_from_slice(slice: &[u8]) -> Self::Seed {
                 Self::Seed::clone_from_slice(slice)
-            }
-            fn nonce_from_slice(slice: &[u8]) -> Self::Nonce {
-                Self::Nonce::clone_from_slice(slice)
             }
 
             fn new(key: &Self::Key) -> Self {

@@ -1,7 +1,4 @@
-use crate::{
-    drbg::variant::{DrbgVariant, GenerateInputInit, InstantiateInputInit, ReseedInputInit},
-    hash_based::hashfn::HashFn,
-};
+use crate::{drbg::variant::DrbgVariant, hash_based::hashfn::HashFn};
 
 pub struct Hmac<F: HashFn> {
     v: F::Hash,
@@ -32,72 +29,16 @@ impl<F: HashFn> Hmac<F> {
     }
 }
 
-pub struct HmacInstantiateInput<F: HashFn> {
-    entropy_input: F::Entropy,
-    nonce: F::Nonce,
-    personalizaton_string: Vec<u8>,
-}
-
-impl<F: HashFn> InstantiateInputInit for HmacInstantiateInput<F> {
-    fn init(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
-        Self {
-            entropy_input: F::entropy_from_slice(entropy_input),
-            nonce: F::nonce_from_slice(nonce),
-            personalizaton_string: Vec::from(personalization_string),
-        }
-    }
-}
-
-pub struct HmacReseedInput<F: HashFn> {
-    entropy_input: F::Entropy,
-    additional_input: Vec<u8>,
-}
-
-impl<F: HashFn> ReseedInputInit for HmacReseedInput<F> {
-    fn init(entropy_input: &[u8], additional_input: &[u8]) -> Self {
-        Self {
-            entropy_input: F::entropy_from_slice(entropy_input),
-            additional_input: Vec::from(additional_input),
-        }
-    }
-}
-
-pub struct HmacGenerateInput<'a> {
-    buf: &'a mut [u8],
-    additional_input: Vec<u8>,
-}
-
-impl<'a> GenerateInputInit<'a> for HmacGenerateInput<'a> {
-    fn init(buf: &'a mut [u8], additional_input: &[u8], _: u64) -> Self {
-        Self {
-            buf,
-            additional_input: Vec::from(additional_input),
-        }
-    }
-}
-
-impl<'a, F: HashFn> DrbgVariant<'a> for Hmac<F> {
+impl<F: HashFn> DrbgVariant for Hmac<F> {
     const MAX_RESEED_INTERVAL: u64 = F::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
-    type InstantiateInput = HmacInstantiateInput<F>;
-    type ReseedInput = HmacReseedInput<F>;
-    type GenerateInput = HmacGenerateInput<'a>;
-    type GenerateError = std::convert::Infallible;
-
-    fn instantiate(
-        HmacInstantiateInput {
-            entropy_input,
-            nonce,
-            personalizaton_string,
-        }: Self::InstantiateInput,
-    ) -> Self {
-        let mut seed_material = Vec::with_capacity(
-            entropy_input.as_ref().len() + nonce.as_ref().len() + personalizaton_string.len(),
-        );
-        seed_material.extend(entropy_input.as_ref());
-        seed_material.extend(nonce.as_ref());
-        seed_material.extend(personalizaton_string);
+    fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
+        let mut seed_material =
+            Vec::with_capacity(entropy_input.len() + nonce.len() + personalization_string.len());
+        seed_material.extend(entropy_input);
+        seed_material.extend(nonce);
+        seed_material.extend(personalization_string);
         let mut hmac = Self {
             v: F::hash_from_slice(&vec![0x01; F::BLOCK_LEN]),
             key: F::hash_from_slice(&vec![0x00; F::BLOCK_LEN]),
@@ -106,32 +47,25 @@ impl<'a, F: HashFn> DrbgVariant<'a> for Hmac<F> {
         hmac
     }
 
-    fn reseed(
-        &mut self,
-        HmacReseedInput {
-            entropy_input,
-            additional_input,
-        }: Self::ReseedInput,
-    ) {
-        let mut seed_material =
-            Vec::with_capacity(entropy_input.as_ref().len() + additional_input.len());
-        seed_material.extend(entropy_input.as_ref());
+    fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
+        let mut seed_material = Vec::with_capacity(entropy_input.len() + additional_input.len());
+        seed_material.extend(entropy_input);
         seed_material.extend(additional_input);
         self.update(&seed_material);
     }
 
+    type GenerateError = std::convert::Infallible;
     fn generate(
         &mut self,
-        HmacGenerateInput {
-            buf,
-            additional_input,
-        }: &mut Self::GenerateInput,
+        bytes: &mut [u8],
+        additional_input: &[u8],
+        _: u64,
     ) -> Result<(), Self::GenerateError> {
         if !additional_input.is_empty() {
             self.update(additional_input);
         }
-        let mut temp: Vec<u8> = Vec::with_capacity(buf.len());
-        while temp.len() < buf.len() {
+        let mut temp: Vec<u8> = Vec::with_capacity(bytes.len());
+        while temp.len() < bytes.len() {
             self.v = F::hmac(&self.key, self.v.as_ref());
             temp.extend(self.v.as_ref());
         }

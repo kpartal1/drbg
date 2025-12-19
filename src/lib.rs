@@ -30,18 +30,12 @@ macro_rules! define_drbg_builder {
         pub struct $builder<'a, E> {
             personalization_string: &'a [u8],
             reseed_interval: Option<u64>,
-            additional_input: &'a [u8],
             entropy: std::marker::PhantomData<E>,
         }
 
         impl<'a, E> $builder<'a, E> {
-            pub fn personalization_string(mut self, p: &'a [u8]) -> Self {
-                self.personalization_string = p;
-                self
-            }
-
-            pub fn additional_input(mut self, p: &'a [u8]) -> Self {
-                self.additional_input = p;
+            pub fn personalization_string(mut self, personalization_string: &'a [u8]) -> Self {
+                self.personalization_string = personalization_string;
                 self
             }
 
@@ -49,14 +43,13 @@ macro_rules! define_drbg_builder {
                 $builder {
                     personalization_string: self.personalization_string,
                     reseed_interval: self.reseed_interval,
-                    additional_input: self.additional_input,
                     entropy: std::marker::PhantomData::<En>,
                 }
             }
         }
 
         impl<'a, E: Entropy> $builder<'a, E> {
-            pub fn build(self) -> Result<$name<'a, E>, E::Error> {
+            pub fn build(self) -> Result<$name<E>, E::Error> {
                 let mut drbg = Drbg::<$pr, $variant<$inner>, E>::new(self.personalization_string)?;
 
                 if let Some(reseed_interval) = self.reseed_interval {
@@ -69,11 +62,9 @@ macro_rules! define_drbg_builder {
             pub fn random_bytes(
                 self,
                 buf: &mut [u8],
-            ) -> Result<
-                (),
-                DrbgError<<$variant<'a, $inner> as DrbgVariant<'a>>::GenerateError, E::Error>,
-            > {
-                let additional_input = self.additional_input.clone();
+                additional_input: &[u8],
+            ) -> Result<(), DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>>
+            {
                 self.build()
                     .map_err(DrbgError::EntropyError)?
                     .get_random_bytes(buf, additional_input)
@@ -86,28 +77,25 @@ macro_rules! define_drbg_builder {
 
 macro_rules! define_drbg {
     ($name:ident, $builder:ident, $pr:tt, $variant:ident, $inner:ident) => {
-        pub struct $name<'a, E = OsRng>(Drbg<$pr, $variant<'a, $inner>, E>);
+        pub struct $name<E = OsRng>(Drbg<$pr, $variant<$inner>, E>);
 
-        impl<'a> $name<'a> {
+        impl<'a> $name {
             pub fn builder() -> $builder<'a, OsRng> {
                 $builder {
                     personalization_string: &[],
                     reseed_interval: None,
-                    additional_input: &[],
                     entropy: std::marker::PhantomData,
                 }
             }
         }
 
-        impl<'a, E: Entropy> $name<'a, E> {
+        impl<E: Entropy> $name<E> {
             pub fn get_random_bytes(
                 &mut self,
-                buf: &'a mut [u8],
-                additional_input: &'a [u8],
-            ) -> Result<
-                (),
-                DrbgError<<$variant<'a, $inner> as DrbgVariant<'a>>::GenerateError, E::Error>,
-            > {
+                buf: &mut [u8],
+                additional_input: &[u8],
+            ) -> Result<(), DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>>
+            {
                 self.0.get_random_bytes(buf, additional_input)
             }
         }
@@ -137,76 +125,76 @@ define_all_drbg!(
     (DrbgPrCtrAes192, DrbgPrCtrAes192Builder, Pr, Ctr, Aes192),
     (DrbgCtrAes128, DrbgCtrAes128Builder, NoPr, Ctr, Aes128),
     (DrbgPrCtrAes128, DrbgPrCtrAes128Builder, Pr, Ctr, Aes128),
-    // (DrbgHashSha224, DrbgHashSha224Builder, NoPr, Hash, Sha224),
-    // (DrbgPrHashSha224, DrbgPrHashSha224Builder, Pr, Hash, Sha224),
-    // (
-    //     DrbgHashSha512_224,
-    //     DrbgHashSha512_224Builder,
-    //     NoPr,
-    //     Hash,
-    //     Sha512_224
-    // ),
-    // (
-    //     DrbgPrHashSha512_224,
-    //     DrbgPrHashSha512_224Builder,
-    //     Pr,
-    //     Hash,
-    //     Sha512_224
-    // ),
-    // (DrbgHashSha256, DrbgHashSha256Builder, NoPr, Hash, Sha256),
-    // (DrbgPrHashSha256, DrbgPrHashSha256Builder, Pr, Hash, Sha256),
-    // (
-    //     DrbgHashSha512_256,
-    //     DrbgHashSha512_256Builder,
-    //     NoPr,
-    //     Hash,
-    //     Sha512_256
-    // ),
-    // (
-    //     DrbgPrHashSha512_256,
-    //     DrbgPrHashSha512_256Builder,
-    //     Pr,
-    //     Hash,
-    //     Sha512_256
-    // ),
-    // (DrbgHashSha384, DrbgHashSha384Builder, NoPr, Hash, Sha384),
-    // (DrbgPrHashSha384, DrbgPrHashSha384Builder, Pr, Hash, Sha384),
-    // (DrbgHashSha512, DrbgHashSha512Builder, NoPr, Hash, Sha512),
-    // (DrbgPrHashSha512, DrbgPrHashSha512Builder, Pr, Hash, Sha512),
-    // (DrbgHmacSha224, DrbgHmacSha224Builder, NoPr, Hmac, Sha224),
-    // (DrbgPrHmacSha224, DrbgPrHmacSha224Builder, Pr, Hmac, Sha224),
-    // (
-    //     DrbgHmacSha512_224,
-    //     DrbgHmacSha512_224Builder,
-    //     NoPr,
-    //     Hmac,
-    //     Sha512_224
-    // ),
-    // (
-    //     DrbgPrHmacSha512_224,
-    //     DrbgPrHmacSha512_224Builder,
-    //     Pr,
-    //     Hmac,
-    //     Sha512_224
-    // ),
-    // (DrbgHmacSha256, DrbgHmacSha256Builder, NoPr, Hmac, Sha256),
-    // (DrbgPrHmacSha256, DrbgPrHmacSha256Builder, Pr, Hmac, Sha256),
-    // (
-    //     DrbgHmacSha512_256,
-    //     DrbgHmacSha512_256Builder,
-    //     NoPr,
-    //     Hmac,
-    //     Sha512_256
-    // ),
-    // (
-    //     DrbgPrHmacSha512_256,
-    //     DrbgPrHmacSha512_256Builder,
-    //     Pr,
-    //     Hmac,
-    //     Sha512_256
-    // ),
-    // (DrbgHmacSha384, DrbgHmacSha384Builder, NoPr, Hmac, Sha384),
-    // (DrbgPrHmacSha384, DrbgPrHmacSha384Builder, Pr, Hmac, Sha384),
-    // (DrbgHmacSha512, DrbgHmacSha512Builder, NoPr, Hmac, Sha512),
-    // (DrbgPrHmacSha512, DrbgPrHmacSha512Builder, Pr, Hmac, Sha512),
+    (DrbgHashSha224, DrbgHashSha224Builder, NoPr, Hash, Sha224),
+    (DrbgPrHashSha224, DrbgPrHashSha224Builder, Pr, Hash, Sha224),
+    (
+        DrbgHashSha512_224,
+        DrbgHashSha512_224Builder,
+        NoPr,
+        Hash,
+        Sha512_224
+    ),
+    (
+        DrbgPrHashSha512_224,
+        DrbgPrHashSha512_224Builder,
+        Pr,
+        Hash,
+        Sha512_224
+    ),
+    (DrbgHashSha256, DrbgHashSha256Builder, NoPr, Hash, Sha256),
+    (DrbgPrHashSha256, DrbgPrHashSha256Builder, Pr, Hash, Sha256),
+    (
+        DrbgHashSha512_256,
+        DrbgHashSha512_256Builder,
+        NoPr,
+        Hash,
+        Sha512_256
+    ),
+    (
+        DrbgPrHashSha512_256,
+        DrbgPrHashSha512_256Builder,
+        Pr,
+        Hash,
+        Sha512_256
+    ),
+    (DrbgHashSha384, DrbgHashSha384Builder, NoPr, Hash, Sha384),
+    (DrbgPrHashSha384, DrbgPrHashSha384Builder, Pr, Hash, Sha384),
+    (DrbgHashSha512, DrbgHashSha512Builder, NoPr, Hash, Sha512),
+    (DrbgPrHashSha512, DrbgPrHashSha512Builder, Pr, Hash, Sha512),
+    (DrbgHmacSha224, DrbgHmacSha224Builder, NoPr, Hmac, Sha224),
+    (DrbgPrHmacSha224, DrbgPrHmacSha224Builder, Pr, Hmac, Sha224),
+    (
+        DrbgHmacSha512_224,
+        DrbgHmacSha512_224Builder,
+        NoPr,
+        Hmac,
+        Sha512_224
+    ),
+    (
+        DrbgPrHmacSha512_224,
+        DrbgPrHmacSha512_224Builder,
+        Pr,
+        Hmac,
+        Sha512_224
+    ),
+    (DrbgHmacSha256, DrbgHmacSha256Builder, NoPr, Hmac, Sha256),
+    (DrbgPrHmacSha256, DrbgPrHmacSha256Builder, Pr, Hmac, Sha256),
+    (
+        DrbgHmacSha512_256,
+        DrbgHmacSha512_256Builder,
+        NoPr,
+        Hmac,
+        Sha512_256
+    ),
+    (
+        DrbgPrHmacSha512_256,
+        DrbgPrHmacSha512_256Builder,
+        Pr,
+        Hmac,
+        Sha512_256
+    ),
+    (DrbgHmacSha384, DrbgHmacSha384Builder, NoPr, Hmac, Sha384),
+    (DrbgPrHmacSha384, DrbgPrHmacSha384Builder, Pr, Hmac, Sha384),
+    (DrbgHmacSha512, DrbgHmacSha512Builder, NoPr, Hmac, Sha512),
+    (DrbgPrHmacSha512, DrbgPrHmacSha512Builder, Pr, Hmac, Sha512),
 );

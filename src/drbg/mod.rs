@@ -1,8 +1,4 @@
-use crate::{
-    Entropy,
-    drbg::variant::{DrbgVariant, GenerateInputInit, InstantiateInputInit, ReseedInputInit},
-    pr::PredictionResistance,
-};
+use crate::{Entropy, drbg::variant::DrbgVariant, pr::PredictionResistance};
 use std::marker::PhantomData;
 
 pub mod variant;
@@ -22,43 +18,43 @@ pub struct Drbg<Pr, V, E> {
     _entropy: PhantomData<E>,
 }
 
-impl<'a, Pr: PredictionResistance, V: DrbgVariant<'a>, E: Entropy> DrbgVariant<'a>
-    for Drbg<Pr, V, E>
-{
+impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> DrbgVariant for Drbg<Pr, V, E> {
     const MAX_RESEED_INTERVAL: u64 = V::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = V::SECURITY_STRENGTH;
 
-    type InstantiateInput = V::InstantiateInput;
-    type ReseedInput = V::ReseedInput;
-    type GenerateInput = V::GenerateInput;
-    type GenerateError = DrbgError<V::GenerateError, E::Error>;
-
-    fn instantiate(input: Self::InstantiateInput) -> Self {
+    fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         Self {
-            variant: V::instantiate(input),
+            variant: V::instantiate(entropy_input, nonce, personalization_string),
             reseed_counter: 1,
             reseed_interval: V::MAX_RESEED_INTERVAL,
             _pr: PhantomData,
             _entropy: PhantomData,
         }
     }
-    fn reseed(&mut self, input: Self::ReseedInput) {
-        self.variant.reseed(input);
+    fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
+        self.variant.reseed(entropy_input, additional_input);
         self.reseed_counter = 1;
     }
-    fn generate(&mut self, input: &mut Self::GenerateInput) -> Result<(), Self::GenerateError> {
+
+    type GenerateError = DrbgError<V::GenerateError, E::Error>;
+    fn generate(
+        &mut self,
+        bytes: &mut [u8],
+        additional_input: &[u8],
+        reseed_counter: u64,
+    ) -> Result<(), Self::GenerateError> {
         if Pr::must_reseed(self.reseed_counter, V::MAX_RESEED_INTERVAL) {
             return Err(DrbgError::ReseedRequired);
         }
         self.variant
-            .generate(input)
+            .generate(bytes, additional_input, reseed_counter)
             .map_err(DrbgError::GenerateError)?;
         self.reseed_counter += 1;
         Ok(())
     }
 }
 
-impl<'a, Pr: PredictionResistance, V: DrbgVariant<'a>, E: Entropy> Drbg<Pr, V, E> {
+impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
     pub fn set_reseed_interval(&mut self, reseed_interval: u64) {
         self.reseed_interval = reseed_interval;
     }
@@ -68,32 +64,25 @@ impl<'a, Pr: PredictionResistance, V: DrbgVariant<'a>, E: Entropy> Drbg<Pr, V, E
         E::try_fill_bytes(&mut entropy_input)?;
         let mut nonce = vec![0; Self::SECURITY_STRENGTH / 2];
         E::try_fill_bytes(&mut nonce)?;
-        let ii = <Self as DrbgVariant>::InstantiateInput::init(
+        Ok(<Self as DrbgVariant>::instantiate(
             &entropy_input,
             &nonce,
             personalization_string,
-        );
-        Ok(<Self as DrbgVariant>::instantiate(ii))
+        ))
     }
 
     pub fn get_random_bytes(
         &mut self,
-        buf: &'a mut [u8],
-        additional_input: &'a [u8],
+        buf: &mut [u8],
+        additional_input: &[u8],
     ) -> Result<(), DrbgError<V::GenerateError, E::Error>> {
-        let mut gi = <Self as DrbgVariant<'a>>::GenerateInput::init(
-            buf,
-            additional_input,
-            self.reseed_counter,
-        );
-        match self.generate(&mut gi) {
+        match self.generate(buf, additional_input, self.reseed_counter) {
             Ok(block) => Ok(block),
             Err(DrbgError::ReseedRequired) => {
                 let mut entropy_input = vec![0; V::MIN_ENTROPY];
                 E::try_fill_bytes(&mut entropy_input).map_err(DrbgError::EntropyError)?;
-                let ri = <Self as DrbgVariant>::ReseedInput::init(&entropy_input, additional_input);
-                self.reseed(ri);
-                Ok(self.generate(&mut gi)?)
+                self.reseed(&entropy_input, additional_input);
+                Ok(self.generate(buf, additional_input, self.reseed_counter)?)
             }
             Err(e) => Err(e),
         }
