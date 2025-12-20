@@ -1,5 +1,5 @@
 use aes::cipher::{
-    consts::{U8, U12, U16, U32, U40, U48},
+    consts::{U32, U40, U48},
     generic_array::GenericArray,
 };
 
@@ -17,8 +17,15 @@ pub trait Cipher {
     fn block_from_slice(slice: &[u8]) -> Self::Block;
     fn key_from_slice(slice: &[u8]) -> Self::Key;
 
-    type Seed: AsRef<[u8]>;
+    type Seed: AsRef<[u8]> + AsMut<[u8]>;
     fn seed_from_slice(slice: &[u8]) -> Self::Seed;
+    fn seed_to_key_block(seed: Self::Seed) -> (Self::Key, Self::Block) {
+        let seed = seed.as_ref();
+        (
+            Self::key_from_slice(&seed[..Self::KEY_LEN]),
+            Self::block_from_slice(&seed[Self::KEY_LEN..]),
+        )
+    }
 
     fn new(key: &Self::Key) -> Self;
     fn block_encrypt(&self, block: &mut Self::Block);
@@ -47,7 +54,6 @@ macro_rules! impl_aes {
             }
 
             type Seed = GenericArray<u8, $seed_len>;
-
             fn seed_from_slice(slice: &[u8]) -> Self::Seed {
                 Self::Seed::clone_from_slice(slice)
             }

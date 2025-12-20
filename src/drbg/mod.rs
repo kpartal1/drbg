@@ -1,13 +1,27 @@
 use crate::{Entropy, drbg::variant::DrbgVariant, pr::PredictionResistance};
-use std::marker::PhantomData;
+use std::{fmt::Debug, marker::PhantomData};
 
 pub mod variant;
 
 #[derive(Debug)]
 pub enum DrbgError<V, E> {
     ReseedRequired,
+    PersonalizationStringTooLong,
+    AdditionalInputTooLong,
     GenerateError(V),
     EntropyError(E),
+}
+
+impl<V: Debug, E: Debug> std::fmt::Display for DrbgError<V, E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DrbgError::ReseedRequired => write!(f, "Reseed required."),
+            DrbgError::PersonalizationStringTooLong => write!(f, "Personaliation String too long."),
+            DrbgError::AdditionalInputTooLong => write!(f, "Additional input too long."),
+            DrbgError::GenerateError(v) => write!(f, "Drbg Generate Error: {v:?}"),
+            DrbgError::EntropyError(e) => write!(f, "Drbg Entropy Error: {e:?}"),
+        }
+    }
 }
 
 pub struct Drbg<Pr, V, E> {
@@ -59,32 +73,41 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         self.reseed_interval = reseed_interval;
     }
 
-    pub fn new(personalization_string: &[u8]) -> Result<Self, E::Error> {
-        let mut entropy_input = vec![0; Self::MIN_ENTROPY];
-        E::try_fill_bytes(&mut entropy_input)?;
-        let mut nonce = vec![0; Self::SECURITY_STRENGTH / 2];
-        E::try_fill_bytes(&mut nonce)?;
+    pub fn new(
+        personalization_string: &[u8],
+    ) -> Result<Self, DrbgError<std::convert::Infallible, E::Error>> {
+        if personalization_string.len() > V::MAX_PERSONALIZATION_STRING_LENGTH {
+            return Err(DrbgError::PersonalizationStringTooLong);
+        }
+        let mut entropy = vec![0; Self::MIN_ENTROPY + Self::SECURITY_STRENGTH / 2];
+        E::try_fill_bytes(&mut entropy).map_err(DrbgError::EntropyError)?;
         Ok(<Self as DrbgVariant>::instantiate(
-            &entropy_input,
-            &nonce,
+            &entropy[..Self::MIN_ENTROPY],
+            &entropy[Self::MIN_ENTROPY..],
             personalization_string,
         ))
     }
 
-    pub fn get_random_bytes(
+    pub fn try_fill_bytes(
         &mut self,
         buf: &mut [u8],
         additional_input: &[u8],
     ) -> Result<(), DrbgError<V::GenerateError, E::Error>> {
-        match self.generate(buf, additional_input, self.reseed_counter) {
-            Ok(block) => Ok(block),
-            Err(DrbgError::ReseedRequired) => {
-                let mut entropy_input = vec![0; V::MIN_ENTROPY];
-                E::try_fill_bytes(&mut entropy_input).map_err(DrbgError::EntropyError)?;
-                self.reseed(&entropy_input, additional_input);
-                Ok(self.generate(buf, additional_input, self.reseed_counter)?)
-            }
-            Err(e) => Err(e),
+        if additional_input.len() > V::MAX_ADDITIONAL_INPUT_LENGTH {
+            return Err(DrbgError::AdditionalInputTooLong);
         }
+        for block in buf.chunks_mut(V::MAX_BYTES_PER_REQUEST) {
+            match self.generate(block, additional_input, self.reseed_counter) {
+                Err(DrbgError::ReseedRequired) => {
+                    let mut entropy_input = vec![0; V::MIN_ENTROPY];
+                    E::try_fill_bytes(&mut entropy_input).map_err(DrbgError::EntropyError)?;
+                    self.reseed(&entropy_input, additional_input);
+                    self.generate(block, additional_input, self.reseed_counter)?;
+                }
+                Err(e) => return Err(e),
+                _ => {}
+            }
+        }
+        Ok(())
     }
 }

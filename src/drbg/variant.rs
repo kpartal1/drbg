@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 pub trait DrbgVariant {
     const MAX_RESEED_INTERVAL: u64;
@@ -8,10 +8,11 @@ pub trait DrbgVariant {
     const MAX_ENTROPY: usize = 1 << 35;
     const MAX_PERSONALIZATION_STRING_LENGTH: usize = 1 << 35;
     const MAX_ADDITIONAL_INPUT_LENGTH: usize = 1 << 35;
+    const MAX_BYTES_PER_REQUEST: usize = 1 << 19;
 
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self;
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]);
-    type GenerateError: Debug;
+    type GenerateError: Display + Debug;
     fn generate(
         &mut self,
         bytes: &mut [u8],

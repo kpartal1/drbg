@@ -1,8 +1,8 @@
-use rand::{TryRngCore, rngs::OsRng};
-use std::fmt::Debug;
+use rand_core::{OsRng, TryRngCore};
+use std::fmt::{Debug, Display};
 
 pub trait Entropy {
-    type Error: Debug;
+    type Error: Display + Debug;
 
     fn try_fill_bytes(bytes: &mut [u8]) -> Result<(), Self::Error>;
     fn fill_bytes(bytes: &mut [u8]) {

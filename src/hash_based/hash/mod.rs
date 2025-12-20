@@ -8,16 +8,13 @@ pub struct Hash<F: HashFn> {
 }
 
 impl<F: HashFn> Hash<F> {
-    fn hashgen(&self, requested_number_of_bytes: usize) -> Vec<u8> {
-        let m = requested_number_of_bytes.div_ceil(F::BLOCK_LEN);
+    fn hashgen(&self, bytes: &mut [u8]) {
         let mut data = self.v.clone();
-        let mut w = Vec::with_capacity(F::BLOCK_LEN * m);
-        for _ in 0..m {
-            let h = F::hash(data.as_ref());
-            w.extend(h.as_ref());
+        for block in bytes.chunks_mut(F::BLOCK_LEN) {
+            let w = F::hash(data.as_ref());
+            block.copy_from_slice(&w.as_ref()[..block.len()]);
             util::inc(data.as_mut());
         }
-        Vec::from(&w[..requested_number_of_bytes])
     }
 }
 
@@ -26,38 +23,21 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
-        let mut seed_material =
-            Vec::with_capacity(entropy_input.len() + nonce.len() + personalization_string.len());
-        seed_material.extend(entropy_input);
-        seed_material.extend(nonce);
-        seed_material.extend(personalization_string);
-
+        let seed_material = [entropy_input, nonce, personalization_string].concat();
         let v = util::hash_df::<F>(&seed_material);
 
-        let mut c = Vec::with_capacity(std::mem::size_of::<u8>() + v.as_ref().len());
-        c.push(0x00);
-        c.extend(v.as_ref());
-        let c = F::seed_from_slice(util::hash_df::<F>(&c).as_ref());
+        let mut c = vec![0x00; std::mem::size_of::<u8>() + F::SEED_LEN];
+        c[1..].copy_from_slice(v.as_ref());
+        let c = util::hash_df::<F>(&c);
         Self { v, c }
     }
 
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
-        let mut seed_material = Vec::with_capacity(
-            std::mem::size_of::<u8>()
-                + self.v.as_ref().len()
-                + entropy_input.len()
-                + additional_input.len(),
-        );
-        seed_material.push(0x01);
-        seed_material.extend(self.v.as_ref());
-        seed_material.extend(entropy_input);
-        seed_material.extend(additional_input);
-
+        let seed_material = [&[0x01], self.v.as_ref(), entropy_input, additional_input].concat();
         self.v = util::hash_df::<F>(&seed_material);
 
-        let mut c = Vec::with_capacity(std::mem::size_of::<u8>() + self.v.as_ref().len());
-        c.push(0x00);
-        c.extend(self.v.as_ref());
+        let mut c = vec![0x00; std::mem::size_of::<u8>() + F::SEED_LEN];
+        c[1..].copy_from_slice(self.v.as_ref());
         self.c = util::hash_df::<F>(&c)
     }
 
@@ -69,29 +49,23 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
         reseed_counter: u64,
     ) -> Result<(), Self::GenerateError> {
         if !additional_input.is_empty() {
-            let mut data = Vec::with_capacity(
-                std::mem::size_of::<u8>() + self.v.as_ref().len() + additional_input.len(),
-            );
-            data.push(0x02);
-            data.extend(self.v.as_ref());
-            data.extend(additional_input);
+            let data = [&[0x02], self.v.as_ref(), additional_input].concat();
             let w = F::hash(data);
 
             util::add(self.v.as_mut(), w.as_ref());
         }
 
-        // let returned_bytes = self.hashgen(buf.len());
+        self.hashgen(bytes);
 
-        let mut data = Vec::with_capacity(std::mem::size_of::<u8>() + self.v.as_ref().len());
-        data.push(0x03);
-        data.extend(self.v.as_ref());
+        let mut data = vec![0x03; std::mem::size_of::<u8>() + F::SEED_LEN];
+        data[1..].copy_from_slice(self.v.as_ref());
         let h = F::hash(data);
 
         // Modular addition is associative.
         util::add(self.v.as_mut(), h.as_ref());
         util::add(self.v.as_mut(), self.c.as_ref());
         util::add(self.v.as_mut(), &reseed_counter.to_be_bytes());
-        // Ok(returned_bytes)
+
         Ok(())
     }
 }

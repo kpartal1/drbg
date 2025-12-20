@@ -13,9 +13,11 @@ pub fn block_cipher_df<C: Cipher>(input_string: &[u8]) -> C::Seed {
     let l = input_string.len() as u32;
     let n = C::SEED_LEN as u32;
 
-    let cap = (std::mem::size_of::<u32>() * 2 + input_string.len() + 1).div_ceil(C::BLOCK_LEN)
-        * C::BLOCK_LEN;
+    let cap = C::BLOCK_LEN
+        + (std::mem::size_of::<u32>() * 2 + input_string.len() + 1).div_ceil(C::BLOCK_LEN)
+            * C::BLOCK_LEN;
     let mut s = Vec::with_capacity(cap);
+    s.resize(C::BLOCK_LEN, 0); // Prepend IV
     s.extend(l.to_be_bytes());
     s.extend(n.to_be_bytes());
     s.extend(input_string);
@@ -28,30 +30,23 @@ pub fn block_cipher_df<C: Cipher>(input_string: &[u8]) -> C::Seed {
               \x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f";
     let k = C::key_from_slice(&k[..C::KEY_LEN]);
 
-    let mut temp = Vec::with_capacity(C::SEED_LEN);
-    let mut i = 0u32;
-    while temp.len() < C::SEED_LEN {
-        let mut iv_s = Vec::with_capacity(C::SEED_LEN + s.len());
-        iv_s.extend(i.to_be_bytes());
-        iv_s.extend(vec![0; C::BLOCK_LEN - std::mem::size_of::<u32>()]);
-        iv_s.extend(&s);
-
-        let bcc: C::Block = bcc::<C>(&k, &iv_s);
-        temp.extend(bcc.as_ref());
-        i += 1;
+    let mut temp = C::seed_from_slice(&vec![0; C::SEED_LEN]);
+    for block in temp.as_mut().chunks_mut(C::BLOCK_LEN) {
+        let chain = bcc::<C>(&k, &s);
+        block.copy_from_slice(&chain.as_ref()[..block.len()]);
+        inc(&mut s[..std::mem::size_of::<u32>()]); // Increment IV
     }
 
-    let k = &temp[..C::KEY_LEN];
-    let cipher = C::new(&C::key_from_slice(k));
+    let (k, mut x) = C::seed_to_key_block(temp);
+    let cipher = C::new(&k);
 
-    let mut x = C::block_from_slice(&temp[C::KEY_LEN..C::KEY_LEN + C::BLOCK_LEN]);
-    let mut temp = Vec::with_capacity(C::SEED_LEN);
-    while temp.len() < C::SEED_LEN {
+    let mut temp = C::seed_from_slice(&vec![0; C::SEED_LEN]);
+    for block in temp.as_mut().chunks_mut(C::BLOCK_LEN) {
         cipher.block_encrypt(&mut x);
-        temp.extend(x.as_ref());
+        block.copy_from_slice(&x.as_ref()[..block.len()]);
     }
 
-    C::seed_from_slice(&temp[..C::SEED_LEN])
+    temp
 }
 
 fn bcc<C: Cipher>(key: &C::Key, data: &[u8]) -> C::Block {
@@ -59,12 +54,10 @@ fn bcc<C: Cipher>(key: &C::Key, data: &[u8]) -> C::Block {
 
     let mut chaining_value = C::block_from_slice(&vec![0; C::BLOCK_LEN]);
     for block in data.chunks(C::BLOCK_LEN) {
-        for (i, &b) in block.iter().enumerate() {
-            chaining_value.as_mut()[i] ^= b;
+        for (byte, chaining_byte) in block.iter().zip(chaining_value.as_mut()) {
+            *chaining_byte ^= byte;
         }
-
         cipher.block_encrypt(&mut chaining_value);
     }
-
     chaining_value
 }

@@ -2,7 +2,7 @@ use ctr::{Aes128, Aes192, Aes256, Ctr};
 use drbg::{Drbg, DrbgError, variant::DrbgVariant};
 use hash_based::{Hash, Hmac};
 use pr::{NoPr, Pr};
-use rand::rngs::OsRng;
+use rand_core::{OsRng, TryCryptoRng, TryRngCore};
 use sha2::{Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256};
 
 mod ctr;
@@ -39,17 +39,17 @@ macro_rules! define_drbg_builder {
                 self
             }
 
-            pub fn entropy<En>(self) -> $builder<'a, En> {
+            pub fn entropy<E2>(self) -> $builder<'a, E2> {
                 $builder {
                     personalization_string: self.personalization_string,
                     reseed_interval: self.reseed_interval,
-                    entropy: std::marker::PhantomData::<En>,
+                    entropy: std::marker::PhantomData::<E2>,
                 }
             }
         }
 
         impl<'a, E: Entropy> $builder<'a, E> {
-            pub fn build(self) -> Result<$name<E>, E::Error> {
+            pub fn build(self) -> Result<$name<E>, DrbgError<std::convert::Infallible, E::Error>> {
                 let mut drbg = Drbg::<$pr, $variant<$inner>, E>::new(self.personalization_string)?;
 
                 if let Some(reseed_interval) = self.reseed_interval {
@@ -57,17 +57,6 @@ macro_rules! define_drbg_builder {
                 }
 
                 Ok($name(drbg))
-            }
-
-            pub fn random_bytes(
-                self,
-                buf: &mut [u8],
-                additional_input: &[u8],
-            ) -> Result<(), DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>>
-            {
-                self.build()
-                    .map_err(DrbgError::EntropyError)?
-                    .get_random_bytes(buf, additional_input)
             }
         }
 
@@ -80,6 +69,16 @@ macro_rules! define_drbg {
         pub struct $name<E = OsRng>(Drbg<$pr, $variant<$inner>, E>);
 
         impl<'a> $name {
+            pub fn new() -> Result<
+                Self,
+                DrbgError<
+                    <$variant<$inner> as DrbgVariant>::GenerateError,
+                    <OsRng as TryRngCore>::Error,
+                >,
+            > {
+                Self::builder().build()
+            }
+
             pub fn builder() -> $builder<'a, OsRng> {
                 $builder {
                     personalization_string: &[],
@@ -90,15 +89,53 @@ macro_rules! define_drbg {
         }
 
         impl<E: Entropy> $name<E> {
-            pub fn get_random_bytes(
+            pub fn fill_bytes(
                 &mut self,
-                buf: &mut [u8],
+                bytes: &mut [u8],
+            ) -> Result<(), DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>>
+            {
+                self.fill_bytes_with_ai(bytes, &[])
+            }
+
+            pub fn fill_bytes_with_ai(
+                &mut self,
+                bytes: &mut [u8],
                 additional_input: &[u8],
             ) -> Result<(), DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>>
             {
-                self.0.get_random_bytes(buf, additional_input)
+                self.0.try_fill_bytes(bytes, additional_input)
             }
         }
+
+        impl Default for $name {
+            fn default() -> Self {
+                match Self::new() {
+                    Ok(drbg) => drbg,
+                    Err(e) => panic!("Failed to Instantiate DRBG: {e:?}"),
+                }
+            }
+        }
+
+        impl<E: Entropy> TryRngCore for $name<E> {
+            type Error = DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>;
+            fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+                let mut bytes = [0; std::mem::size_of::<u32>()];
+                self.try_fill_bytes(&mut bytes)?;
+                Ok(u32::from_be_bytes(bytes))
+            }
+
+            fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+                let mut bytes = [0; std::mem::size_of::<u64>()];
+                self.try_fill_bytes(&mut bytes)?;
+                Ok(u64::from_be_bytes(bytes))
+            }
+
+            fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+                self.fill_bytes(dst)
+            }
+        }
+
+        impl<E: Entropy> TryCryptoRng for $name<E> {}
 
         define_drbg_builder!($name, $builder, $pr, $variant, $inner);
     };
@@ -119,12 +156,12 @@ macro_rules! define_all_drbg {
 }
 
 define_all_drbg!(
-    (DrbgCtrAes256, DrbgCtrAes256Builder, NoPr, Ctr, Aes256),
-    (DrbgPrCtrAes256, DrbgPrCtrAes256Builder, Pr, Ctr, Aes256),
-    (DrbgCtrAes192, DrbgCtrAes192Builder, NoPr, Ctr, Aes192),
-    (DrbgPrCtrAes192, DrbgPrCtrAes192Builder, Pr, Ctr, Aes192),
     (DrbgCtrAes128, DrbgCtrAes128Builder, NoPr, Ctr, Aes128),
     (DrbgPrCtrAes128, DrbgPrCtrAes128Builder, Pr, Ctr, Aes128),
+    (DrbgCtrAes192, DrbgCtrAes192Builder, NoPr, Ctr, Aes192),
+    (DrbgPrCtrAes192, DrbgPrCtrAes192Builder, Pr, Ctr, Aes192),
+    (DrbgCtrAes256, DrbgCtrAes256Builder, NoPr, Ctr, Aes256),
+    (DrbgPrCtrAes256, DrbgPrCtrAes256Builder, Pr, Ctr, Aes256),
     (DrbgHashSha224, DrbgHashSha224Builder, NoPr, Hash, Sha224),
     (DrbgPrHashSha224, DrbgPrHashSha224Builder, Pr, Hash, Sha224),
     (
