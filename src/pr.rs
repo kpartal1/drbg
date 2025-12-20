@@ -8,7 +8,7 @@ pub trait PredictionResistance {
 
 impl PredictionResistance for Pr {
     fn must_reseed(reseed_counter: u64, _: u64) -> bool {
-        reseed_counter > 1
+        reseed_counter > 0
     }
 }
 

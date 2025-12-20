@@ -1,4 +1,4 @@
-use crate::drbg::variant::DrbgVariant;
+use crate::drbg::variant::{DrbgVariant, ReseedRequired};
 use cipher::Cipher;
 
 mod cipher;
@@ -54,13 +54,12 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
         self.update(&seed_material);
     }
 
-    type GenerateError = std::convert::Infallible;
     fn generate(
         &mut self,
         bytes: &mut [u8],
         additional_input: &[u8],
         _: u64,
-    ) -> Result<(), Self::GenerateError> {
+    ) -> Result<(), ReseedRequired> {
         let additional_input = match additional_input.len() {
             0 => C::seed_from_slice(&vec![0; C::SEED_LEN]),
             _ => {

@@ -11,17 +11,14 @@ impl Entropy for NoEntropy {
 }
 
 fn main() {
-    let mut bytes = [0; 11];
-    let _ = DrbgCtrAes256::default().fill_bytes(&mut bytes);
-    println!("default: {bytes:?}");
     let drbg = DrbgCtrAes256::builder().entropy::<NoEntropy>().build();
     match drbg {
         Ok(mut drbg) => {
             for _ in 0..10 {
-                let mut bytes = [0; 1 << 4];
+                let mut bytes = [0; 1];
                 match drbg.fill_bytes(&mut bytes) {
                     Ok(_) => println!("{bytes:?}"),
-                    Err(e) => println!("ERROR: {e:?}"),
+                    Err(e) => println!("DRBG ERROR: {e}"),
                 }
             }
         }

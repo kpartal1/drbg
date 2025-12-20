@@ -1,5 +1,5 @@
 use ctr::{Aes128, Aes192, Aes256, Ctr};
-use drbg::{Drbg, DrbgError, variant::DrbgVariant};
+use drbg::{Drbg, DrbgError};
 use hash_based::{Hash, Hmac};
 use pr::{NoPr, Pr};
 use rand_core::{OsRng, TryCryptoRng, TryRngCore};
@@ -11,7 +11,7 @@ mod entropy;
 mod hash_based;
 mod pr;
 
-pub use entropy::Entropy;
+pub use entropy::{CryptoEntropy, Entropy};
 
 macro_rules! define_reseed_interval {
     ($builder:ident, NoPr) => {
@@ -39,7 +39,7 @@ macro_rules! define_drbg_builder {
                 self
             }
 
-            pub fn entropy<E2>(self) -> $builder<'a, E2> {
+            pub fn entropy<E2: Entropy>(self) -> $builder<'a, E2> {
                 $builder {
                     personalization_string: self.personalization_string,
                     reseed_interval: self.reseed_interval,
@@ -49,11 +49,11 @@ macro_rules! define_drbg_builder {
         }
 
         impl<'a, E: Entropy> $builder<'a, E> {
-            pub fn build(self) -> Result<$name<E>, DrbgError<std::convert::Infallible, E::Error>> {
+            pub fn build(self) -> Result<$name<E>, DrbgError<E::Error>> {
                 let mut drbg = Drbg::<$pr, $variant<$inner>, E>::new(self.personalization_string)?;
 
                 if let Some(reseed_interval) = self.reseed_interval {
-                    drbg.set_reseed_interval(reseed_interval);
+                    drbg.set_reseed_interval(reseed_interval)?;
                 }
 
                 Ok($name(drbg))
@@ -69,13 +69,7 @@ macro_rules! define_drbg {
         pub struct $name<E = OsRng>(Drbg<$pr, $variant<$inner>, E>);
 
         impl<'a> $name {
-            pub fn new() -> Result<
-                Self,
-                DrbgError<
-                    <$variant<$inner> as DrbgVariant>::GenerateError,
-                    <OsRng as TryRngCore>::Error,
-                >,
-            > {
+            pub fn new() -> Result<Self, DrbgError<<OsRng as TryRngCore>::Error>> {
                 Self::builder().build()
             }
 
@@ -89,11 +83,7 @@ macro_rules! define_drbg {
         }
 
         impl<E: Entropy> $name<E> {
-            pub fn fill_bytes(
-                &mut self,
-                bytes: &mut [u8],
-            ) -> Result<(), DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>>
-            {
+            pub fn fill_bytes(&mut self, bytes: &mut [u8]) -> Result<(), DrbgError<E::Error>> {
                 self.fill_bytes_with_ai(bytes, &[])
             }
 
@@ -101,8 +91,7 @@ macro_rules! define_drbg {
                 &mut self,
                 bytes: &mut [u8],
                 additional_input: &[u8],
-            ) -> Result<(), DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>>
-            {
+            ) -> Result<(), DrbgError<E::Error>> {
                 self.0.try_fill_bytes(bytes, additional_input)
             }
         }
@@ -111,23 +100,23 @@ macro_rules! define_drbg {
             fn default() -> Self {
                 match Self::new() {
                     Ok(drbg) => drbg,
-                    Err(e) => panic!("Failed to Instantiate DRBG: {e:?}"),
+                    Err(e) => panic!("Failed to instantiate default DRBG: {e}"),
                 }
             }
         }
 
         impl<E: Entropy> TryRngCore for $name<E> {
-            type Error = DrbgError<<$variant<$inner> as DrbgVariant>::GenerateError, E::Error>;
+            type Error = DrbgError<E::Error>;
             fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
                 let mut bytes = [0; std::mem::size_of::<u32>()];
                 self.try_fill_bytes(&mut bytes)?;
-                Ok(u32::from_be_bytes(bytes))
+                Ok(u32::from_ne_bytes(bytes))
             }
 
             fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
                 let mut bytes = [0; std::mem::size_of::<u64>()];
                 self.try_fill_bytes(&mut bytes)?;
-                Ok(u64::from_be_bytes(bytes))
+                Ok(u64::from_ne_bytes(bytes))
             }
 
             fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
@@ -135,7 +124,7 @@ macro_rules! define_drbg {
             }
         }
 
-        impl<E: Entropy> TryCryptoRng for $name<E> {}
+        impl<E: CryptoEntropy> TryCryptoRng for $name<E> {}
 
         define_drbg_builder!($name, $builder, $pr, $variant, $inner);
     };

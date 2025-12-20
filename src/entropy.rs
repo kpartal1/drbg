@@ -12,6 +12,8 @@ pub trait Entropy {
     }
 }
 
+pub trait CryptoEntropy: Entropy {}
+
 impl Entropy for OsRng {
     type Error = <OsRng as TryRngCore>::Error;
 
@@ -19,3 +21,5 @@ impl Entropy for OsRng {
         OsRng.try_fill_bytes(bytes)
     }
 }
+
+impl CryptoEntropy for OsRng {}

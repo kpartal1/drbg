@@ -1,4 +1,7 @@
-use crate::{drbg::variant::DrbgVariant, hash_based::hashfn::HashFn};
+use crate::{
+    drbg::variant::{DrbgVariant, ReseedRequired},
+    hash_based::hashfn::HashFn,
+};
 
 pub struct Hmac<F: HashFn> {
     v: F::Hash,
@@ -38,13 +41,12 @@ impl<F: HashFn> DrbgVariant for Hmac<F> {
         self.update(&seed_material);
     }
 
-    type GenerateError = std::convert::Infallible;
     fn generate(
         &mut self,
         bytes: &mut [u8],
         additional_input: &[u8],
         _: u64,
-    ) -> Result<(), Self::GenerateError> {
+    ) -> Result<(), ReseedRequired> {
         if !additional_input.is_empty() {
             self.update(additional_input);
         }
@@ -53,6 +55,7 @@ impl<F: HashFn> DrbgVariant for Hmac<F> {
             block.copy_from_slice(&self.v.as_ref()[..block.len()]);
         }
         self.update(additional_input);
+
         Ok(())
     }
 }

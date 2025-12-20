@@ -1,4 +1,7 @@
-use crate::{drbg::variant::DrbgVariant, hash_based::hashfn::HashFn};
+use crate::{
+    drbg::variant::{DrbgVariant, ReseedRequired},
+    hash_based::hashfn::HashFn,
+};
 
 mod util;
 
@@ -41,13 +44,12 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
         self.c = util::hash_df::<F>(&c)
     }
 
-    type GenerateError = std::convert::Infallible;
     fn generate(
         &mut self,
         bytes: &mut [u8],
         additional_input: &[u8],
         reseed_counter: u64,
-    ) -> Result<(), Self::GenerateError> {
+    ) -> Result<(), ReseedRequired> {
         if !additional_input.is_empty() {
             let data = [&[0x02], self.v.as_ref(), additional_input].concat();
             let w = F::hash(data);

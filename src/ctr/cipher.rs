@@ -9,7 +9,6 @@ pub trait Cipher {
     const SEED_LEN: usize = Self::BLOCK_LEN + Self::KEY_LEN;
 
     const SECURITY_STRENGTH: usize;
-    const MAX_NUMBER_OF_BYTES_PER_REQUEST: u32;
     const MAX_RESEED_INTERVAL: u64;
 
     type Block: AsRef<[u8]> + AsMut<[u8]>;
@@ -41,7 +40,6 @@ macro_rules! impl_aes {
             const KEY_LEN: usize = $key_len;
 
             const SECURITY_STRENGTH: usize = Self::KEY_LEN;
-            const MAX_NUMBER_OF_BYTES_PER_REQUEST: u32 = (1 << 19) / 8;
             const MAX_RESEED_INTERVAL: u64 = 1 << 48;
 
             type Block = aes::Block;
