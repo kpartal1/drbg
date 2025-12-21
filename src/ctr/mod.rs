@@ -34,6 +34,11 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
     const MAX_RESEED_INTERVAL: u64 = C::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = C::SECURITY_STRENGTH;
 
+    fn print_values(&self) {
+        println!("key: {:?}", hex::encode(self.key.as_ref()));
+        println!("v_block: {:?}", hex::encode(self.v.as_ref()));
+    }
+
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         let seed_material = [entropy_input, nonce, personalization_string].concat();
         let seed_material = util::block_cipher_df::<C>(&seed_material);

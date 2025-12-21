@@ -25,6 +25,11 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
     const MAX_RESEED_INTERVAL: u64 = 1 << 48;
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
+    fn print_values(&self) {
+        println!("v_seed: {:?}", hex::encode(self.v.as_ref()));
+        println!("c_seed: {:?}", hex::encode(self.c.as_ref()));
+    }
+
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         let seed_material = [entropy_input, nonce, personalization_string].concat();
         let v = util::hash_df::<F>(&seed_material);

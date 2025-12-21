@@ -36,8 +36,8 @@ pub fn add(fst: &mut [u8], snd: &[u8]) {
 pub fn hash_df<F: HashFn>(input_string: &[u8]) -> F::Seed {
     let mut temp = vec![0; F::SEED_LEN];
     for (counter, block) in (0x01..).zip(temp.chunks_mut(F::BLOCK_LEN)) {
-        let no_bytes = (F::SEED_LEN as u32).to_be_bytes();
-        let data = [&[counter], no_bytes.as_slice(), input_string].concat();
+        let no_bytes: &[u8] = &(F::SEED_LEN as u32).to_be_bytes();
+        let data = [&[counter], no_bytes, input_string].concat();
         block.copy_from_slice(&F::hash(&data).as_ref()[..block.len()]);
     }
     F::seed_from_slice(&temp[..F::SEED_LEN])
