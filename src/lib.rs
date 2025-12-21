@@ -57,12 +57,26 @@ macro_rules! define_drbg_builder {
 
         impl<'a, E: Entropy> $builder<'a, E> {
             pub fn build(mut self) -> Result<$name<E>, DrbgError<E::Error>> {
+                if self.personalization_string.len()
+                    > <$variant<$inner> as DrbgVariant>::MAX_PERSONALIZATION_STRING_LENGTH
+                {
+                    return Err(DrbgError::PersonalizationStringTooLong);
+                }
+
                 let mut drbg = match self.nonce {
-                    Some(nonce) => Drbg::<$pr, $variant<$inner>, E>::new(
-                        self.entropy,
-                        nonce,
-                        self.personalization_string,
-                    )?,
+                    Some(nonce) => {
+                        if nonce.len() < <$variant<$inner> as DrbgVariant>::SECURITY_STRENGTH / 2 {
+                            return Err(DrbgError::NonceTooShort);
+                        } else if nonce.len() > <$variant<$inner> as DrbgVariant>::MAX_ENTROPY {
+                            return Err(DrbgError::NonceTooLong);
+                        }
+
+                        Drbg::<$pr, $variant<$inner>, E>::new(
+                            self.entropy,
+                            nonce,
+                            self.personalization_string,
+                        )?
+                    }
                     None => {
                         let mut nonce =
                             vec![0; <$variant<$inner> as DrbgVariant>::SECURITY_STRENGTH / 2];
@@ -80,8 +94,13 @@ macro_rules! define_drbg_builder {
                 if let Some(reseed_interval) = self.reseed_interval {
                     if reseed_interval < 1 {
                         return Err(DrbgError::ReseedIntervalTooShort);
+                    } else if reseed_interval
+                        > <$variant<$inner> as DrbgVariant>::MAX_RESEED_INTERVAL
+                    {
+                        return Err(DrbgError::ReseedIntervalTooLong);
                     }
-                    drbg.set_reseed_interval(reseed_interval)?;
+
+                    drbg.set_reseed_interval(reseed_interval);
                 }
 
                 Ok($name(drbg))

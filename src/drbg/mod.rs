@@ -13,6 +13,8 @@ pub enum DrbgError<E> {
     ReseedIntervalTooShort,
     PersonalizationStringTooLong,
     AdditionalInputTooLong,
+    NonceTooLong,
+    NonceTooShort,
     EntropyError(E),
 }
 
@@ -27,6 +29,11 @@ impl<E: std::fmt::Display> std::fmt::Display for DrbgError<E> {
                 write!(f, "Personalization string too long.")
             }
             DrbgError::AdditionalInputTooLong => write!(f, "Additional input too long."),
+            DrbgError::NonceTooLong => write!(f, "Nonce cannot be longer than {} bytes.", 1 << 32),
+            DrbgError::NonceTooShort => write!(
+                f,
+                "Nonce must be at least security_strength / 2 bytes long."
+            ),
             DrbgError::EntropyError(e) => write!(f, "Drbg Entropy Error: {e}"),
         }
     }
@@ -79,12 +86,8 @@ pub struct Drbg<Pr, V, E> {
 }
 
 impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
-    pub fn set_reseed_interval(&mut self, reseed_interval: u64) -> Result<(), DrbgError<E::Error>> {
-        if reseed_interval > V::MAX_RESEED_INTERVAL {
-            return Err(DrbgError::ReseedIntervalTooLong);
-        }
+    pub fn set_reseed_interval(&mut self, reseed_interval: u64) {
         self.variant.reseed_interval = reseed_interval;
-        Ok(())
     }
 
     pub fn new(
@@ -92,9 +95,6 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         nonce: &[u8],
         personalization_string: &[u8],
     ) -> Result<Self, DrbgError<E::Error>> {
-        if personalization_string.len() > V::MAX_PERSONALIZATION_STRING_LENGTH {
-            return Err(DrbgError::PersonalizationStringTooLong);
-        }
         let mut entropy_input = vec![0; V::MIN_ENTROPY];
         entropy
             .fill_bytes(&mut entropy_input)

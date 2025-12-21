@@ -6,7 +6,7 @@ pub trait DrbgVariant {
     const SECURITY_STRENGTH: usize;
 
     const MIN_ENTROPY: usize = Self::SECURITY_STRENGTH;
-    const _MAX_ENTROPY: usize = 1 << 32;
+    const MAX_ENTROPY: usize = 1 << 32;
     const MAX_PERSONALIZATION_STRING_LENGTH: usize = 1 << 32;
     const MAX_ADDITIONAL_INPUT_LENGTH: usize = 1 << 32;
     const MAX_BYTES_PER_REQUEST: usize = 1 << 16;
