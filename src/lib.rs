@@ -950,7 +950,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -980,7 +981,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1010,7 +1012,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1040,7 +1043,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1070,7 +1074,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1100,7 +1105,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1153,7 +1159,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1183,7 +1190,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1213,7 +1221,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1243,7 +1252,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1273,7 +1283,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1303,7 +1314,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1355,7 +1367,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1385,7 +1398,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
@@ -1415,7 +1429,8 @@ mod tests {
                             .build()?;
 
                         drbg.0
-                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap())
+                            .map_err(DrbgError::EntropyError)?;
 
                         let mut bytes = vec![0; returned_bits.len()];
                         if trial.additional_inputs.is_empty() {
