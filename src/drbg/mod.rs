@@ -39,6 +39,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
     const MAX_RESEED_INTERVAL: u64 = V::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = V::SECURITY_STRENGTH;
 
+    #[cfg(test)]
     fn print_values(&self) {
         self.variant.print_values();
         println!("reseed_counter: {}", self.reseed_counter);
@@ -126,9 +127,10 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
                     .fill_bytes(&mut entropy_input)
                     .map_err(DrbgError::EntropyError)?;
                 self.variant.reseed(&entropy_input, additional_input);
+                // Section 9.3.1 Step 7.4
                 let _ = self
                     .variant
-                    .generate(block, additional_input, self.variant.reseed_counter);
+                    .generate(block, &[], self.variant.reseed_counter);
             }
         }
         Ok(())
@@ -144,6 +146,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         self.variant.reseed(&entropy_input, additional_input);
     }
 
+    #[cfg(test)]
     pub fn print_values(&self) {
         println!("===== DRBG VALUES =====");
         self.variant.print_values();

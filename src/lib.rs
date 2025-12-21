@@ -121,6 +121,7 @@ macro_rules! define_drbg {
                 self.0.fill_bytes(bytes, additional_input)
             }
 
+            #[cfg(test)]
             pub fn print_values(&self) {
                 self.0.print_values()
             }
@@ -263,7 +264,7 @@ mod tests {
         path::Path,
     };
 
-    use crate::{DrbgCtrAes256, DrbgPrCtrAes256, Entropy, drbg::DrbgError};
+    use crate::{DrbgCtrAes128, DrbgPrCtrAes128, Entropy, drbg::DrbgError};
 
     #[derive(Default)]
     struct MockEntropy {
@@ -303,11 +304,9 @@ mod tests {
     fn test_pr_ctr_aes128() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
         for case in generate_pr_test_cases("drbgtestvectors/drbgvectors_pr_true/CTR_DRBG.rsp")
             .into_iter()
-            .filter(|c| c.name == "AES-256")
+            .filter(|c| c.name == "AES-128")
         {
             for trial in case.trials {
-                println!("trial: {trial:?}");
-
                 let returned_bits = hex::decode(trial.returned_bits).unwrap();
                 let mut entropy = MockEntropy::default();
                 entropy
@@ -320,44 +319,27 @@ mod tests {
                     .bytes
                     .push(hex::decode(&trial.entropy_input_prs[1]).unwrap());
 
-                let mut drbg = DrbgPrCtrAes256::builder()
+                let mut drbg = DrbgPrCtrAes128::builder()
                     .entropy(entropy)
                     .personalization_string(&hex::decode(trial.personalization_string).unwrap())
                     .nonce(&hex::decode(&trial.nonce).unwrap())
                     .build()?;
 
-                println!("** INSTANTIATE:");
-                drbg.print_values();
-
                 let mut bytes = vec![0; returned_bits.len()];
                 if trial.additional_inputs.is_empty() {
                     drbg.fill_bytes(&mut bytes)?;
-
-                    println!("** GENERATE (FIRST CALL) no ai:");
-                    drbg.print_values();
-
                     drbg.fill_bytes(&mut bytes)?;
                 } else {
                     drbg.fill_bytes_with_ai(
                         &mut bytes,
                         &hex::decode(&trial.additional_inputs[0]).unwrap(),
                     )?;
-
-                    println!("additional: {}", trial.additional_inputs[0]);
-                    println!("** GENERATE (FIRST CALL) with ai:");
-
-                    drbg.print_values();
                     drbg.fill_bytes_with_ai(
                         &mut bytes,
                         &hex::decode(&trial.additional_inputs[1]).unwrap(),
                     )?;
                 }
 
-                println!("** GENERATE (SECOND CALL):");
-                drbg.print_values();
-
-                println!("{bytes:?}");
-                println!("{returned_bits:?}");
                 assert!(bytes == returned_bits);
             }
         }
@@ -444,11 +426,9 @@ mod tests {
     fn test_ctr_aes128() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
         for case in generate_no_pr_test_cases("drbgtestvectors/drbgvectors_pr_false/CTR_DRBG.rsp")
             .into_iter()
-            .filter(|c| c.name == "AES-256")
+            .filter(|c| c.name == "AES-128")
         {
             for trial in case.trials {
-                println!("trial: {trial:?}");
-
                 let returned_bits = hex::decode(trial.returned_bits).unwrap();
                 let mut entropy = MockEntropy::default();
                 entropy
@@ -458,14 +438,11 @@ mod tests {
                     .bytes
                     .push(hex::decode(&trial.entropy_input_reseed).unwrap());
 
-                let mut drbg = DrbgCtrAes256::builder()
+                let mut drbg = DrbgCtrAes128::builder()
                     .entropy(entropy)
                     .personalization_string(&hex::decode(trial.personalization_string).unwrap())
                     .nonce(&hex::decode(&trial.nonce).unwrap())
                     .build()?;
-
-                println!("** INSTANTIATE:");
-                drbg.print_values();
 
                 drbg.0
                     .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
@@ -473,32 +450,18 @@ mod tests {
                 let mut bytes = vec![0; returned_bits.len()];
                 if trial.additional_inputs.is_empty() {
                     drbg.fill_bytes(&mut bytes)?;
-
-                    println!("** GENERATE (FIRST CALL) no ai:");
-                    drbg.print_values();
-
                     drbg.fill_bytes(&mut bytes)?;
                 } else {
                     drbg.fill_bytes_with_ai(
                         &mut bytes,
                         &hex::decode(&trial.additional_inputs[0]).unwrap(),
                     )?;
-
-                    println!("additional: {}", trial.additional_inputs[0]);
-                    println!("** GENERATE (FIRST CALL) with ai:");
-
-                    drbg.print_values();
                     drbg.fill_bytes_with_ai(
                         &mut bytes,
                         &hex::decode(&trial.additional_inputs[1]).unwrap(),
                     )?;
                 }
 
-                println!("** GENERATE (SECOND CALL):");
-                drbg.print_values();
-
-                println!("{bytes:?}");
-                println!("{returned_bits:?}");
                 assert!(bytes == returned_bits);
             }
         }

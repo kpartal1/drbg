@@ -11,6 +11,7 @@ pub trait DrbgVariant {
     const MAX_ADDITIONAL_INPUT_LENGTH: usize = 1 << 32;
     const MAX_BYTES_PER_REQUEST: usize = 1 << 16;
 
+    #[cfg(test)]
     fn print_values(&self);
 
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self;

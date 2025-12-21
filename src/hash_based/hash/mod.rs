@@ -25,6 +25,7 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
     const MAX_RESEED_INTERVAL: u64 = 1 << 48;
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
+    #[cfg(test)]
     fn print_values(&self) {
         println!("v_seed: {:?}", hex::encode(self.v.as_ref()));
         println!("c_seed: {:?}", hex::encode(self.c.as_ref()));
