@@ -26,12 +26,6 @@ impl<F: HashFn> DrbgVariant for Hmac<F> {
     const MAX_RESEED_INTERVAL: u64 = F::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
-    #[cfg(test)]
-    fn print_values(&self) {
-        println!("v_hash: {:?}", hex::encode(self.v.as_ref()));
-        println!("key: {:?}", hex::encode(self.key.as_ref()));
-    }
-
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         let seed_material = [entropy_input, nonce, personalization_string].concat();
         let mut hmac = Self {

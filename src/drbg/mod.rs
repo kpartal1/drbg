@@ -43,13 +43,6 @@ impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
     const MAX_RESEED_INTERVAL: u64 = V::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = V::SECURITY_STRENGTH;
 
-    #[cfg(test)]
-    fn print_values(&self) {
-        self.variant.print_values();
-        println!("reseed_counter: {}", self.reseed_counter);
-        println!("reseed_interval: {}", self.reseed_interval);
-    }
-
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         Self {
             variant: V::instantiate(entropy_input, nonce, personalization_string),
@@ -149,12 +142,5 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
             .fill_bytes(&mut entropy_input)
             .map_err(DrbgError::EntropyError);
         self.variant.reseed(&entropy_input, additional_input);
-    }
-
-    #[cfg(test)]
-    pub fn print_values(&self) {
-        println!("===== DRBG VALUES =====");
-        self.variant.print_values();
-        println!("=======================");
     }
 }

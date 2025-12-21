@@ -123,11 +123,6 @@ macro_rules! define_drbg {
             ) -> Result<(), DrbgError<E::Error>> {
                 self.0.fill_bytes(bytes, additional_input)
             }
-
-            #[cfg(test)]
-            pub fn print_values(&self) {
-                self.0.print_values()
-            }
         }
 
         impl Default for $name {
