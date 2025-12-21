@@ -10,6 +10,7 @@ pub mod variant;
 #[derive(Debug)]
 pub enum DrbgError<E> {
     ReseedIntervalTooLong,
+    ReseedIntervalTooShort,
     PersonalizationStringTooLong,
     AdditionalInputTooLong,
     EntropyError(E),
@@ -18,7 +19,10 @@ pub enum DrbgError<E> {
 impl<E: std::fmt::Display> std::fmt::Display for DrbgError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DrbgError::ReseedIntervalTooLong => write!(f, "Reseed Interval too long."),
+            DrbgError::ReseedIntervalTooLong => write!(f, "Reseed interval too long."),
+            DrbgError::ReseedIntervalTooShort => {
+                write!(f, "Reseed interval must be greater than 0.")
+            }
             DrbgError::PersonalizationStringTooLong => {
                 write!(f, "Personalization string too long.")
             }
@@ -56,7 +60,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
     }
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
         self.variant.reseed(entropy_input, additional_input);
-        self.reseed_counter = 0;
+        self.reseed_counter = 1;
     }
 
     fn generate(
@@ -65,7 +69,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
         additional_input: &[u8],
         reseed_counter: u64,
     ) -> Result<(), ReseedRequired> {
-        if Pr::must_reseed(self.reseed_counter, V::MAX_RESEED_INTERVAL) {
+        if Pr::must_reseed(self.reseed_counter, self.reseed_interval) {
             return Err(ReseedRequired);
         }
         let _ = self
@@ -117,10 +121,11 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
             return Err(DrbgError::AdditionalInputTooLong);
         }
         for block in bytes.chunks_mut(V::MAX_BYTES_PER_REQUEST) {
-            if self
-                .variant
-                .generate(block, additional_input, self.variant.reseed_counter)
-                .is_err()
+            if Pr::is_pr()
+                || self
+                    .variant
+                    .generate(block, additional_input, self.variant.reseed_counter)
+                    .is_err()
             {
                 let mut entropy_input = vec![0; V::MIN_ENTROPY];
                 self.entropy

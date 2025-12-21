@@ -78,6 +78,9 @@ macro_rules! define_drbg_builder {
                 };
 
                 if let Some(reseed_interval) = self.reseed_interval {
+                    if reseed_interval < 1 {
+                        return Err(DrbgError::ReseedIntervalTooShort);
+                    }
                     drbg.set_reseed_interval(reseed_interval)?;
                 }
 
@@ -264,7 +267,15 @@ mod tests {
         path::Path,
     };
 
-    use crate::{DrbgCtrAes128, DrbgPrCtrAes128, Entropy, drbg::DrbgError};
+    use crate::{
+        DrbgCtrAes128, DrbgCtrAes192, DrbgCtrAes256, DrbgHashSha224, DrbgHashSha256,
+        DrbgHashSha384, DrbgHashSha512, DrbgHashSha512_224, DrbgHashSha512_256, DrbgHmacSha224,
+        DrbgHmacSha256, DrbgHmacSha384, DrbgHmacSha512, DrbgHmacSha512_224, DrbgHmacSha512_256,
+        DrbgPrCtrAes128, DrbgPrCtrAes192, DrbgPrCtrAes256, DrbgPrHashSha224, DrbgPrHashSha256,
+        DrbgPrHashSha384, DrbgPrHashSha512, DrbgPrHashSha512_224, DrbgPrHashSha512_256,
+        DrbgPrHmacSha224, DrbgPrHmacSha256, DrbgPrHmacSha384, DrbgPrHmacSha512,
+        DrbgPrHmacSha512_224, DrbgPrHmacSha512_256, Entropy, drbg::DrbgError,
+    };
 
     #[derive(Default)]
     struct MockEntropy {
@@ -277,7 +288,6 @@ mod tests {
 
         fn fill_bytes(&mut self, bytes: &mut [u8]) -> Result<(), Self::Error> {
             let entropy = &self.bytes[self.pos];
-            println!("entropy input: {}", hex::encode(entropy));
             bytes.copy_from_slice(entropy);
             self.pos += 1;
             Ok(())
@@ -298,52 +308,6 @@ mod tests {
     struct PrTestCase {
         name: String,
         trials: Vec<PrTrial>,
-    }
-
-    #[test]
-    fn test_pr_ctr_aes128() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
-        for case in generate_pr_test_cases("drbgtestvectors/drbgvectors_pr_true/CTR_DRBG.rsp")
-            .into_iter()
-            .filter(|c| c.name == "AES-128")
-        {
-            for trial in case.trials {
-                let returned_bits = hex::decode(trial.returned_bits).unwrap();
-                let mut entropy = MockEntropy::default();
-                entropy
-                    .bytes
-                    .push(hex::decode(trial.entropy_input).unwrap());
-                entropy
-                    .bytes
-                    .push(hex::decode(&trial.entropy_input_prs[0]).unwrap());
-                entropy
-                    .bytes
-                    .push(hex::decode(&trial.entropy_input_prs[1]).unwrap());
-
-                let mut drbg = DrbgPrCtrAes128::builder()
-                    .entropy(entropy)
-                    .personalization_string(&hex::decode(trial.personalization_string).unwrap())
-                    .nonce(&hex::decode(&trial.nonce).unwrap())
-                    .build()?;
-
-                let mut bytes = vec![0; returned_bits.len()];
-                if trial.additional_inputs.is_empty() {
-                    drbg.fill_bytes(&mut bytes)?;
-                    drbg.fill_bytes(&mut bytes)?;
-                } else {
-                    drbg.fill_bytes_with_ai(
-                        &mut bytes,
-                        &hex::decode(&trial.additional_inputs[0]).unwrap(),
-                    )?;
-                    drbg.fill_bytes_with_ai(
-                        &mut bytes,
-                        &hex::decode(&trial.additional_inputs[1]).unwrap(),
-                    )?;
-                }
-
-                assert!(bytes == returned_bits);
-            }
-        }
-        Ok(())
     }
 
     fn generate_pr_test_cases(path: impl AsRef<Path>) -> Vec<PrTestCase> {
@@ -405,6 +369,486 @@ mod tests {
         cases
     }
 
+    #[test]
+    fn test_pr_hash() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
+        for case in generate_pr_test_cases("drbgtestvectors/drbgvectors_pr_true/Hash_DRBG.rsp") {
+            for trial in case.trials {
+                println!("{trial:#?}");
+                let returned_bits = hex::decode(trial.returned_bits).unwrap();
+                let mut entropy = MockEntropy::default();
+                entropy
+                    .bytes
+                    .push(hex::decode(trial.entropy_input).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_prs[0]).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_prs[1]).unwrap());
+
+                match case.name.as_str() {
+                    "SHA-224" => {
+                        println!("SHA-224");
+                        let mut drbg = DrbgPrHashSha224::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-256" => {
+                        println!("SHA-256");
+                        let mut drbg = DrbgPrHashSha256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-384" => {
+                        println!("SHA-384");
+                        let mut drbg = DrbgPrHashSha384::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512" => {
+                        println!("SHA-512");
+                        let mut drbg = DrbgPrHashSha512::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512/224" => {
+                        println!("SHA-512/224");
+                        let mut drbg = DrbgPrHashSha512_224::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512/256" => {
+                        println!("SHA-512/256");
+                        let mut drbg = DrbgPrHashSha512_256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_hmac() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
+        for case in generate_pr_test_cases("drbgtestvectors/drbgvectors_pr_true/HMAC_DRBG.rsp") {
+            for trial in case.trials {
+                println!("{trial:#?}");
+                let returned_bits = hex::decode(trial.returned_bits).unwrap();
+                let mut entropy = MockEntropy::default();
+                entropy
+                    .bytes
+                    .push(hex::decode(trial.entropy_input).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_prs[0]).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_prs[1]).unwrap());
+
+                match case.name.as_str() {
+                    "SHA-224" => {
+                        println!("SHA-224");
+                        let mut drbg = DrbgPrHmacSha224::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-256" => {
+                        println!("SHA-256");
+                        let mut drbg = DrbgPrHmacSha256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-384" => {
+                        println!("SHA-384");
+                        let mut drbg = DrbgPrHmacSha384::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512" => {
+                        println!("SHA-512");
+                        let mut drbg = DrbgPrHmacSha512::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512/224" => {
+                        println!("SHA-512/224");
+                        let mut drbg = DrbgPrHmacSha512_224::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512/256" => {
+                        println!("SHA-512/256");
+                        let mut drbg = DrbgPrHmacSha512_256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_ctr() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
+        for case in generate_pr_test_cases("drbgtestvectors/drbgvectors_pr_true/CTR_DRBG.rsp") {
+            for trial in case.trials {
+                println!("{trial:#?}");
+                let returned_bits = hex::decode(trial.returned_bits).unwrap();
+                let mut entropy = MockEntropy::default();
+                entropy
+                    .bytes
+                    .push(hex::decode(trial.entropy_input).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_prs[0]).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_prs[1]).unwrap());
+
+                match case.name.as_str() {
+                    "AES-128" => {
+                        println!("AES-128");
+                        let mut drbg = DrbgPrCtrAes128::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "AES-192" => {
+                        println!("AES-192");
+                        let mut drbg = DrbgPrCtrAes192::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "AES-256" => {
+                        println!("AES-256");
+                        let mut drbg = DrbgPrCtrAes256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                }
+            }
+        }
+        Ok(())
+    }
+
     #[derive(Clone, Debug, Default)]
     struct Trial {
         entropy_input: String,
@@ -420,52 +864,6 @@ mod tests {
     struct TestCase {
         name: String,
         trials: Vec<Trial>,
-    }
-
-    #[test]
-    fn test_ctr_aes128() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
-        for case in generate_no_pr_test_cases("drbgtestvectors/drbgvectors_pr_false/CTR_DRBG.rsp")
-            .into_iter()
-            .filter(|c| c.name == "AES-128")
-        {
-            for trial in case.trials {
-                let returned_bits = hex::decode(trial.returned_bits).unwrap();
-                let mut entropy = MockEntropy::default();
-                entropy
-                    .bytes
-                    .push(hex::decode(trial.entropy_input).unwrap());
-                entropy
-                    .bytes
-                    .push(hex::decode(&trial.entropy_input_reseed).unwrap());
-
-                let mut drbg = DrbgCtrAes128::builder()
-                    .entropy(entropy)
-                    .personalization_string(&hex::decode(trial.personalization_string).unwrap())
-                    .nonce(&hex::decode(&trial.nonce).unwrap())
-                    .build()?;
-
-                drbg.0
-                    .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
-
-                let mut bytes = vec![0; returned_bits.len()];
-                if trial.additional_inputs.is_empty() {
-                    drbg.fill_bytes(&mut bytes)?;
-                    drbg.fill_bytes(&mut bytes)?;
-                } else {
-                    drbg.fill_bytes_with_ai(
-                        &mut bytes,
-                        &hex::decode(&trial.additional_inputs[0]).unwrap(),
-                    )?;
-                    drbg.fill_bytes_with_ai(
-                        &mut bytes,
-                        &hex::decode(&trial.additional_inputs[1]).unwrap(),
-                    )?;
-                }
-
-                assert!(bytes == returned_bits);
-            }
-        }
-        Ok(())
     }
 
     fn generate_no_pr_test_cases(path: impl AsRef<Path>) -> Vec<TestCase> {
@@ -528,5 +926,523 @@ mod tests {
         }
 
         cases
+    }
+
+    #[test]
+    fn test_no_pr_hash() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
+        for case in generate_no_pr_test_cases("drbgtestvectors/drbgvectors_pr_false/Hash_DRBG.rsp")
+        {
+            for trial in case.trials {
+                println!("{trial:#?}");
+                let returned_bits = hex::decode(trial.returned_bits).unwrap();
+                let mut entropy = MockEntropy::default();
+                entropy
+                    .bytes
+                    .push(hex::decode(trial.entropy_input).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_reseed).unwrap());
+
+                match case.name.as_str() {
+                    "SHA-224" => {
+                        println!("SHA-224");
+                        let mut drbg = DrbgHashSha224::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-256" => {
+                        println!("SHA-256");
+                        let mut drbg = DrbgHashSha256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-384" => {
+                        println!("SHA-384");
+                        let mut drbg = DrbgHashSha384::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512" => {
+                        println!("SHA-512");
+                        let mut drbg = DrbgHashSha512::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512/224" => {
+                        println!("SHA-512/224");
+                        let mut drbg = DrbgHashSha512_224::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512/256" => {
+                        println!("SHA-512/256");
+                        let mut drbg = DrbgHashSha512_256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_no_pr_hmac() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
+        for case in generate_no_pr_test_cases("drbgtestvectors/drbgvectors_pr_false/HMAC_DRBG.rsp")
+        {
+            for trial in case.trials {
+                println!("{trial:#?}");
+                let returned_bits = hex::decode(trial.returned_bits).unwrap();
+                let mut entropy = MockEntropy::default();
+                entropy
+                    .bytes
+                    .push(hex::decode(trial.entropy_input).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_reseed).unwrap());
+
+                match case.name.as_str() {
+                    "SHA-224" => {
+                        println!("SHA-224");
+                        let mut drbg = DrbgHmacSha224::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-256" => {
+                        println!("SHA-256");
+                        let mut drbg = DrbgHmacSha256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-384" => {
+                        println!("SHA-384");
+                        let mut drbg = DrbgHmacSha384::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512" => {
+                        println!("SHA-512");
+                        let mut drbg = DrbgHmacSha512::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512/224" => {
+                        println!("SHA-512/224");
+                        let mut drbg = DrbgHmacSha512_224::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "SHA-512/256" => {
+                        println!("SHA-512/256");
+                        let mut drbg = DrbgHmacSha512_256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_no_pr_ctr() -> Result<(), DrbgError<<MockEntropy as Entropy>::Error>> {
+        for case in generate_no_pr_test_cases("drbgtestvectors/drbgvectors_pr_false/CTR_DRBG.rsp") {
+            for trial in case.trials {
+                println!("{trial:#?}");
+                let returned_bits = hex::decode(trial.returned_bits).unwrap();
+                let mut entropy = MockEntropy::default();
+                entropy
+                    .bytes
+                    .push(hex::decode(trial.entropy_input).unwrap());
+                entropy
+                    .bytes
+                    .push(hex::decode(&trial.entropy_input_reseed).unwrap());
+
+                match case.name.as_str() {
+                    "AES-128" => {
+                        println!("AES-128");
+                        let mut drbg = DrbgCtrAes128::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "AES-192" => {
+                        println!("AES-192");
+                        let mut drbg = DrbgCtrAes192::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    "AES-256" => {
+                        println!("AES-256");
+                        let mut drbg = DrbgCtrAes256::builder()
+                            .entropy(entropy)
+                            .personalization_string(
+                                &hex::decode(trial.personalization_string).unwrap(),
+                            )
+                            .nonce(&hex::decode(trial.nonce).unwrap())
+                            .build()?;
+
+                        drbg.0
+                            .reseed(&hex::decode(trial.additional_input_reseed).unwrap());
+
+                        let mut bytes = vec![0; returned_bits.len()];
+                        if trial.additional_inputs.is_empty() {
+                            drbg.fill_bytes(&mut bytes)?;
+                            drbg.fill_bytes(&mut bytes)?;
+                        } else {
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[0]).unwrap(),
+                            )?;
+                            drbg.fill_bytes_with_ai(
+                                &mut bytes,
+                                &hex::decode(&trial.additional_inputs[1]).unwrap(),
+                            )?;
+                        }
+
+                        assert!(bytes == returned_bits);
+                    }
+                    name => unreachable!("Unexpected cipher type {name} in No-PR test vectors."),
+                }
+            }
+        }
+        Ok(())
     }
 }
