@@ -4,9 +4,6 @@ pub struct NoPr;
 
 pub trait PredictionResistance {
     fn is_pr() -> bool;
-    fn must_reseed(reseed_counter: u64, max: u64) -> bool {
-        reseed_counter > max
-    }
 }
 
 impl PredictionResistance for Pr {

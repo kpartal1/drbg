@@ -563,7 +563,7 @@ mod tests {
 
                         assert!(bytes == returned_bits);
                     }
-                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                    name => unreachable!("Unexpected hash type {name} in PR test vectors."),
                 }
             }
         }
@@ -750,7 +750,7 @@ mod tests {
 
                         assert!(bytes == returned_bits);
                     }
-                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                    name => unreachable!("Unexpected hmac type {name} in PR test vectors."),
                 }
             }
         }
@@ -1144,7 +1144,7 @@ mod tests {
 
                         assert!(bytes == returned_bits);
                     }
-                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                    name => unreachable!("Unexpected hash type {name} in No-PR test vectors."),
                 }
             }
         }
@@ -1353,7 +1353,7 @@ mod tests {
 
                         assert!(bytes == returned_bits);
                     }
-                    name => unreachable!("Unexpected cipher type {name} in PR test vectors."),
+                    name => unreachable!("Unexpected hmac type {name} in No-PR test vectors."),
                 }
             }
         }

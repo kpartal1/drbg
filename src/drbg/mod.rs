@@ -29,7 +29,9 @@ impl<E: std::fmt::Display> std::fmt::Display for DrbgError<E> {
                 write!(f, "Personalization string too long.")
             }
             DrbgError::AdditionalInputTooLong => write!(f, "Additional input too long."),
-            DrbgError::NonceTooLong => write!(f, "Nonce cannot be longer than {} bytes.", 1 << 32),
+            DrbgError::NonceTooLong => {
+                write!(f, "Nonce cannot be longer than {} bytes.", 1u64 << 32)
+            }
             DrbgError::NonceTooShort => write!(
                 f,
                 "Nonce must be at least security_strength / 2 bytes long."
@@ -69,7 +71,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
         additional_input: &[u8],
         reseed_counter: u64,
     ) -> Result<(), ReseedRequired> {
-        if Pr::must_reseed(self.reseed_counter, self.reseed_interval) {
+        if self.reseed_counter > self.reseed_interval {
             return Err(ReseedRequired);
         }
         let _ = self
