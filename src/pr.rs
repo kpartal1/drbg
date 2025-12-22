@@ -3,17 +3,13 @@ pub struct Pr;
 pub struct NoPr;
 
 pub trait PredictionResistance {
-    fn is_pr() -> bool;
+    const IS_PR: bool;
 }
 
 impl PredictionResistance for Pr {
-    fn is_pr() -> bool {
-        true
-    }
+    const IS_PR: bool = true;
 }
 
 impl PredictionResistance for NoPr {
-    fn is_pr() -> bool {
-        false
-    }
+    const IS_PR: bool = false;
 }

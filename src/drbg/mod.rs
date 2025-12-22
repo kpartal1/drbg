@@ -116,7 +116,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
             return Err(DrbgError::AdditionalInputTooLong);
         }
         for block in bytes.chunks_mut(V::MAX_BYTES_PER_REQUEST) {
-            if Pr::is_pr()
+            if Pr::IS_PR
                 || self
                     .variant
                     .generate(block, additional_input, self.variant.reseed_counter)
