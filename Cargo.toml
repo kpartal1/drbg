@@ -11,3 +11,4 @@ sha2 = "0.10.9"
 
 [dev-dependencies]
 hex = "0.4.3"
+special-fun = "0.3.0"

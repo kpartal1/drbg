@@ -135,12 +135,4 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         }
         Ok(())
     }
-
-    #[cfg(test)]
-    pub fn reseed(&mut self, additional_input: &[u8]) -> Result<(), E::Error> {
-        let mut entropy_input = vec![0; V::MIN_ENTROPY];
-        self.entropy.fill_bytes(&mut entropy_input)?;
-        self.variant.reseed(&entropy_input, additional_input);
-        Ok(())
-    }
 }
