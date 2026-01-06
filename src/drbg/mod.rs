@@ -130,7 +130,9 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
                 // Section 9.3.1 Step 7.4
                 let _ = self
                     .variant
+                    .variant
                     .generate(block, &[], self.variant.reseed_counter);
+                self.variant.reseed_counter += 1;
             }
         }
         Ok(())

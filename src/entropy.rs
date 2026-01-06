@@ -13,7 +13,7 @@ impl Entropy for OsRng {
     type Error = <OsRng as TryRngCore>::Error;
 
     fn fill_bytes(&mut self, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        OsRng.try_fill_bytes(bytes)
+        self.try_fill_bytes(bytes)
     }
 }
 
