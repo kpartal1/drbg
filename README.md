@@ -28,7 +28,7 @@ fn main() {
     }
     
     // Prediction resistant version
-    let drbg = DrbgHashSha256::builder()
+    let drbg = DrbgPrHashSha256::builder()
         .entropy(CustomEntropy)
         .personalization_string(b"personalization")
         .build();
