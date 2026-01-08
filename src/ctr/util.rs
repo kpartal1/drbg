@@ -9,6 +9,7 @@ pub fn inc(block: &mut [u8]) {
     }
 }
 
+// Section 10.3.2
 pub fn block_cipher_df<C: Cipher>(input_string: &[u8]) -> C::Seed {
     let l = input_string.len() as u32;
     let n = C::SEED_LEN as u32;
@@ -49,6 +50,7 @@ pub fn block_cipher_df<C: Cipher>(input_string: &[u8]) -> C::Seed {
     temp
 }
 
+// Section 10.3.3
 fn bcc<C: Cipher>(key: &C::Key, data: &[u8]) -> C::Block {
     let cipher = C::new(key);
 

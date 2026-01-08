@@ -14,6 +14,8 @@ mod pr;
 pub use drbg::DrbgError;
 pub use entropy::{CryptoEntropy, Entropy};
 
+// Only allow the user to change the reseed interval if they are using a NoPr variant.
+// When Pr is enabled, the reseed interval need not be changed, we reseed after every call to generate.
 macro_rules! define_reseed_interval {
     ($builder:ident, NoPr) => {
         impl<'a, E> $builder<'a, E> {
@@ -58,13 +60,16 @@ macro_rules! define_drbg_builder {
 
         impl<'a, E: Entropy> $builder<'a, E> {
             pub fn build(mut self) -> Result<$name<E>, DrbgError<E::Error>> {
+                // Section 9.1 Step 3
                 if self.personalization_string.len()
                     > <$variant<$inner> as DrbgVariant>::MAX_PERSONALIZATION_STRING_LENGTH
                 {
                     return Err(DrbgError::PersonalizationStringTooLong);
                 }
 
+                // Section 9.1 Step 8
                 let mut drbg = match self.nonce {
+                    // We assume that if the caller provided a nonce, it is acceptable (aside from length checks).
                     Some(nonce) => {
                         if nonce.len() < <$variant<$inner> as DrbgVariant>::SECURITY_STRENGTH / 2 {
                             return Err(DrbgError::NonceTooShort);
@@ -78,6 +83,8 @@ macro_rules! define_drbg_builder {
                             self.personalization_string,
                         )?
                     }
+                    // Section 8.6.7
+                    // Otherwise, we generate a nonce using our entropy source with half security strength length.
                     None => {
                         let mut nonce =
                             vec![0; <$variant<$inner> as DrbgVariant>::SECURITY_STRENGTH / 2];
@@ -114,13 +121,65 @@ macro_rules! define_drbg_builder {
 
 macro_rules! define_drbg {
     ($name:ident, $builder:ident, $pr:tt, $variant:ident, $inner:ident) => {
+        /// NIST SP800-90A standard DRBG.
+        ///
+        /// Options:
+        ///
+        /// ```ignore
+        /// DrbgCtrAes128
+        /// DrbgPrCtrAes128
+        /// DrbgCtrAes192
+        /// DrbgPrCtrAes192
+        /// DrbgCtrAes256
+        /// DrbgPrCtrAes256
+        /// DrbgHashSha224
+        /// DrbgPrHashSha224
+        /// DrbgHashSha512_224
+        /// DrbgPrHashSha512_224
+        /// DrbgHashSha256
+        /// DrbgPrHashSha256
+        /// DrbgHashSha512_256
+        /// DrbgPrHashSha512_256
+        /// DrbgHashSha384
+        /// DrbgPrHashSha384
+        /// DrbgHashSha512
+        /// DrbgPrHashSha512
+        /// DrbgHmacSha224
+        /// DrbgPrHmacSha224
+        /// DrbgHmacSha512_224
+        /// DrbgPrHmacSha512_224
+        /// DrbgHmacSha256
+        /// DrbgPrHmacSha256
+        /// DrbgHmacSha512_256
+        /// DrbgPrHmacSha512_256
+        /// DrbgHmacSha384
+        /// DrbgPrHmacSha384
+        /// DrbgHmacSha512
+        /// DrbgPrHmacSha512
+        /// ```
         pub struct $name<E = OsRng>(Drbg<$pr, $variant<$inner>, E>);
 
         impl<'a> $name {
+            /// Create the requested DRBG with default OsRng entropy source, no personalization string, default nonce, and default reseed interval.
             pub fn new() -> Result<Self, DrbgError<<OsRng as TryRngCore>::Error>> {
                 Self::builder().build()
             }
 
+            /// Builder for the requested DRBG.
+            ///
+            /// # Usage
+            ///
+            /// ```ignore
+            /// let drbg = DrbgCtrAes256::builder()
+            ///     .entropy(CustomEntropy)
+            ///     .personalization_string(b"personalization")
+            ///     .reseed_interval(1 << 11)
+            ///     .build();
+            /// let drbg = match drbg {
+            ///     Ok(drbg) => drbg,
+            ///     Err(e) => panic!("Failed to instantiate drbg: {e}"),
+            /// }
+            /// ```
             pub fn builder() -> $builder<'a, OsRng> {
                 $builder {
                     personalization_string: &[],
@@ -132,10 +191,16 @@ macro_rules! define_drbg {
         }
 
         impl<E: Entropy> $name<E> {
+            /// Fill bytes array with random bits.
+            ///
+            /// If you want to include additional input, use the `fill_bytes_with_ai` method.
             pub fn fill_bytes(&mut self, bytes: &mut [u8]) -> Result<(), DrbgError<E::Error>> {
                 self.fill_bytes_with_ai(bytes, &[])
             }
 
+            /// Fill bytes array with random bits.
+            ///
+            /// `additional_input` will be factored into the bit generation.
             pub fn fill_bytes_with_ai(
                 &mut self,
                 bytes: &mut [u8],
@@ -146,6 +211,13 @@ macro_rules! define_drbg {
         }
 
         impl Default for $name {
+            /// Instantiates the requested DRBG with:
+            ///
+            /// OsRng entropy, no personalization string, random nonce, and default reseed interval
+            ///
+            /// # Panics
+            ///
+            /// This function panics if the DRBG fails to instantiate. Use new() instead to explicitly handle failure.
             fn default() -> Self {
                 match Self::new() {
                     Ok(drbg) => drbg,
@@ -156,6 +228,7 @@ macro_rules! define_drbg {
 
         impl<E: Entropy> TryRngCore for $name<E> {
             type Error = DrbgError<E::Error>;
+
             fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
                 let mut bytes = [0; std::mem::size_of::<u32>()];
                 self.try_fill_bytes(&mut bytes)?;

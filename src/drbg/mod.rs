@@ -48,6 +48,9 @@ pub struct Variant<Pr, V> {
     _pr: PhantomData<Pr>,
 }
 
+// Shared reseeding behavior across DRBG variants.
+// They all start with reseed_counter at 1, set it to 1 after a reseed, and add 1 to it after a generate.
+// I decided to pull this abstract this behavior to simplify the variants.
 impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
     const MAX_RESEED_INTERVAL: u64 = V::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = V::SECURITY_STRENGTH;
@@ -92,21 +95,38 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         self.variant.reseed_interval = reseed_interval;
     }
 
+    // Section 9.1
     pub fn new(
         mut entropy: E,
         nonce: &[u8],
         personalization_string: &[u8],
     ) -> Result<Self, DrbgError<E::Error>> {
+        // Section 9.1 Step 6
         let mut entropy_input = vec![0; V::MIN_ENTROPY];
         entropy
             .fill_bytes(&mut entropy_input)
             .map_err(DrbgError::EntropyError)?;
         Ok(Self {
+            // Section 9.1 Step 9
             variant: Variant::instantiate(&entropy_input, nonce, personalization_string),
             entropy,
         })
     }
 
+    // Section 9.2
+    fn reseed(&mut self, additional_input: &[u8]) -> Result<(), DrbgError<E::Error>> {
+        // Section 9.2 Step 4
+        // We always use MIN_ENTROPY here for simplicity. Our entropy will be conditioned by df anyway.
+        let mut entropy_input = vec![0; V::MIN_ENTROPY];
+        self.entropy
+            .fill_bytes(&mut entropy_input)
+            .map_err(DrbgError::EntropyError)?;
+        // Section 9.2 Step 5
+        self.variant.reseed(&entropy_input, additional_input);
+        Ok(())
+    }
+
+    // Section 9.3
     pub fn fill_bytes(
         &mut self,
         bytes: &mut [u8],
@@ -115,23 +135,26 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         if additional_input.len() > V::MAX_ADDITIONAL_INPUT_LENGTH {
             return Err(DrbgError::AdditionalInputTooLong);
         }
+        // Section 9.3.1 Step 2
+        // We operate over MAX_BYTES_PER_REQUEST chunks so if we need to reseed, we do.
         for block in bytes.chunks_mut(V::MAX_BYTES_PER_REQUEST) {
+            // Section 9.3.1 Step 7
             if Pr::IS_PR
                 || self
                     .variant
                     .generate(block, additional_input, self.variant.reseed_counter)
                     .is_err()
             {
-                let mut entropy_input = vec![0; V::MIN_ENTROPY];
-                self.entropy
-                    .fill_bytes(&mut entropy_input)
-                    .map_err(DrbgError::EntropyError)?;
-                self.variant.reseed(&entropy_input, additional_input);
+                // Section 9.3.1 Step 7.1
+                self.reseed(additional_input)?;
                 // Section 9.3.1 Step 7.4
+                // If additional_input was passed into reseed, it is null in the call to generate.
+                // We call generate on the inner variant here to avoid the redundant reseed_counter check.
                 let _ = self
                     .variant
                     .variant
                     .generate(block, &[], self.variant.reseed_counter);
+                // Since we avoided the reseed_counter check, we need to increment reseed_counter here instead.
                 self.variant.reseed_counter += 1;
             }
         }

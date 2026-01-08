@@ -1,3 +1,10 @@
+// 4 Statistical Tests for DRBGs as specified in SP800-22
+// 1. The Frequency (Monobit) Test
+// 2. Frequency Test Within a Block
+// 3. The Runs Test
+// 4. Tests for the Longest-Run-of-Ones in a Block
+// NOTE: These tests fail occassionally, I'm pretty sure the DRBGs are still cryptographically secure.
+
 #[cfg(test)]
 mod tests {
     use kondrbg::{

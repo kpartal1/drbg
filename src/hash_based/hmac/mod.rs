@@ -9,6 +9,7 @@ pub struct Hmac<F: HashFn> {
 }
 
 impl<F: HashFn> Hmac<F> {
+    // Section 10.1.2.2
     fn update(&mut self, provided_data: &[u8]) {
         let input = [self.v.as_ref(), &[0x00], provided_data].concat();
         self.key = F::hmac(&self.key, &input);
@@ -26,6 +27,7 @@ impl<F: HashFn> DrbgVariant for Hmac<F> {
     const MAX_RESEED_INTERVAL: u64 = F::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
+    // Section 10.1.2.3
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         let seed_material = [entropy_input, nonce, personalization_string].concat();
         let mut hmac = Self {
@@ -36,11 +38,13 @@ impl<F: HashFn> DrbgVariant for Hmac<F> {
         hmac
     }
 
+    // Section 10.1.2.4
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
         let seed_material = [entropy_input, additional_input].concat();
         self.update(&seed_material);
     }
 
+    // Section 10.1.2.5
     fn generate(
         &mut self,
         bytes: &mut [u8],

@@ -33,6 +33,7 @@ pub fn add(fst: &mut [u8], snd: &[u8]) {
     }
 }
 
+// Section 10.3.1
 pub fn hash_df<F: HashFn>(input_string: &[u8]) -> F::Seed {
     let mut temp = F::seed_from_slice(&vec![0; F::SEED_LEN]);
     for (counter, block) in (0x01..).zip(temp.as_mut().chunks_mut(F::BLOCK_LEN)) {

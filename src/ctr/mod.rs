@@ -12,6 +12,7 @@ pub struct Ctr<C: Cipher> {
 }
 
 impl<C: Cipher> Ctr<C> {
+    // Section 10.2.1.2
     fn update(&mut self, provided_data: &C::Seed) {
         let cipher = C::new(&self.key);
 
@@ -34,6 +35,7 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
     const MAX_RESEED_INTERVAL: u64 = C::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = C::SECURITY_STRENGTH;
 
+    // Section 10.2.1.3.2
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         let seed_material = [entropy_input, nonce, personalization_string].concat();
         let seed_material = util::block_cipher_df::<C>(&seed_material);
@@ -48,12 +50,14 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
         ctr
     }
 
+    // Section 10.2.1.4.2
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
         let seed_material = [entropy_input, additional_input].concat();
         let seed_material = util::block_cipher_df::<C>(&seed_material);
         self.update(&seed_material);
     }
 
+    // Section 10.2.1.5.2
     fn generate(
         &mut self,
         bytes: &mut [u8],

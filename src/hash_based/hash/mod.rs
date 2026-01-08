@@ -25,25 +25,28 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
     const MAX_RESEED_INTERVAL: u64 = 1 << 48;
     const SECURITY_STRENGTH: usize = F::SECURITY_STRENGTH;
 
+    // Section 10.1.1.2
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         let seed_material = [entropy_input, nonce, personalization_string].concat();
         let v = util::hash_df::<F>(&seed_material);
 
-        let mut c = vec![0x00; std::mem::size_of::<u8>() + F::SEED_LEN];
-        c[1..].copy_from_slice(v.as_ref());
-        let c = util::hash_df::<F>(&c);
+        let mut input_string = vec![0x00; std::mem::size_of::<u8>() + F::SEED_LEN];
+        input_string[1..].copy_from_slice(v.as_ref());
+        let c = util::hash_df::<F>(&input_string);
         Self { v, c }
     }
 
+    // Section 10.1.1.3
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
         let seed_material = [&[0x01], self.v.as_ref(), entropy_input, additional_input].concat();
         self.v = util::hash_df::<F>(&seed_material);
 
-        let mut c = vec![0x00; std::mem::size_of::<u8>() + F::SEED_LEN];
-        c[1..].copy_from_slice(self.v.as_ref());
-        self.c = util::hash_df::<F>(&c)
+        let mut input_string = vec![0x00; std::mem::size_of::<u8>() + F::SEED_LEN];
+        input_string[1..].copy_from_slice(self.v.as_ref());
+        self.c = util::hash_df::<F>(&input_string)
     }
 
+    // Section 10.1.1.4
     fn generate(
         &mut self,
         bytes: &mut [u8],
