@@ -41,17 +41,16 @@ impl<E: std::fmt::Display> std::fmt::Display for DrbgError<E> {
     }
 }
 
-pub struct Variant<Pr, V> {
+pub struct Variant<V> {
     variant: V,
     reseed_counter: u64,
     reseed_interval: u64,
-    _pr: PhantomData<Pr>,
 }
 
 // Shared reseeding behavior across DRBG variants.
 // They all start with reseed_counter at 1, set it to 1 after a reseed, and add 1 to it after a generate.
 // I decided to pull this abstract this behavior to simplify the variants.
-impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
+impl<V: DrbgVariant> DrbgVariant for Variant<V> {
     const MAX_RESEED_INTERVAL: u64 = V::MAX_RESEED_INTERVAL;
     const SECURITY_STRENGTH: usize = V::SECURITY_STRENGTH;
 
@@ -60,7 +59,6 @@ impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
             variant: V::instantiate(entropy_input, nonce, personalization_string),
             reseed_counter: 1,
             reseed_interval: V::MAX_RESEED_INTERVAL,
-            _pr: PhantomData,
         }
     }
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
@@ -86,8 +84,9 @@ impl<Pr: PredictionResistance, V: DrbgVariant> DrbgVariant for Variant<Pr, V> {
 }
 
 pub struct Drbg<Pr, V, E> {
-    variant: Variant<Pr, V>,
+    variant: Variant<V>,
     entropy: E,
+    _pr: PhantomData<Pr>,
 }
 
 impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
@@ -110,6 +109,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
             // Section 9.1 Step 9
             variant: Variant::instantiate(&entropy_input, nonce, personalization_string),
             entropy,
+            _pr: PhantomData,
         })
     }
 
