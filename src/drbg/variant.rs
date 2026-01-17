@@ -13,10 +13,5 @@ pub trait DrbgVariant {
 
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self;
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]);
-    fn generate(
-        &mut self,
-        bytes: &mut [u8],
-        additional_input: &[u8],
-        reseed_counter: u64,
-    ) -> Result<(), ReseedRequired>;
+    fn generate(&mut self, bytes: &mut [u8], additional_input: &[u8], reseed_counter: u64);
 }

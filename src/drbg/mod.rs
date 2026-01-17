@@ -49,11 +49,8 @@ pub struct Variant<V> {
 
 // Shared reseeding behavior across DRBG variants.
 // They all start with reseed_counter at 1, set it to 1 after a reseed, and add 1 to it after a generate.
-// I decided to pull this abstract this behavior to simplify the variants.
-impl<V: DrbgVariant> DrbgVariant for Variant<V> {
-    const MAX_RESEED_INTERVAL: u64 = V::MAX_RESEED_INTERVAL;
-    const SECURITY_STRENGTH: usize = V::SECURITY_STRENGTH;
-
+// I decided to abstract this behavior to simplify the variants.
+impl<V: DrbgVariant> Variant<V> {
     fn instantiate(entropy_input: &[u8], nonce: &[u8], personalization_string: &[u8]) -> Self {
         Self {
             variant: V::instantiate(entropy_input, nonce, personalization_string),
@@ -61,6 +58,7 @@ impl<V: DrbgVariant> DrbgVariant for Variant<V> {
             reseed_interval: V::MAX_RESEED_INTERVAL,
         }
     }
+
     fn reseed(&mut self, entropy_input: &[u8], additional_input: &[u8]) {
         self.variant.reseed(entropy_input, additional_input);
         self.reseed_counter = 1;
@@ -75,8 +73,7 @@ impl<V: DrbgVariant> DrbgVariant for Variant<V> {
         if self.reseed_counter > self.reseed_interval {
             return Err(ReseedRequired);
         }
-        let _ = self
-            .variant
+        self.variant
             .generate(bytes, additional_input, reseed_counter);
         self.reseed_counter += 1;
         Ok(())
@@ -150,8 +147,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
                 // Section 9.3.1 Step 7.4
                 // If additional_input was passed into reseed, it is null in the call to generate.
                 // We call generate on the inner variant here to avoid the redundant reseed_counter check.
-                let _ = self
-                    .variant
+                self.variant
                     .variant
                     .generate(block, &[], self.variant.reseed_counter);
                 // Since we avoided the reseed_counter check, we need to increment reseed_counter here instead.

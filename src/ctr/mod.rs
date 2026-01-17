@@ -58,12 +58,7 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
     }
 
     // Section 10.2.1.5.2
-    fn generate(
-        &mut self,
-        bytes: &mut [u8],
-        additional_input: &[u8],
-        _: u64,
-    ) -> Result<(), ReseedRequired> {
+    fn generate(&mut self, bytes: &mut [u8], additional_input: &[u8], _: u64) {
         let additional_input = match additional_input.len() {
             0 => C::seed_from_slice(&vec![0; C::SEED_LEN]),
             _ => {
@@ -82,7 +77,5 @@ impl<C: Cipher> DrbgVariant for Ctr<C> {
         }
 
         self.update(&additional_input);
-
-        Ok(())
     }
 }

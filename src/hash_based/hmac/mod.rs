@@ -45,12 +45,7 @@ impl<F: HashFn> DrbgVariant for Hmac<F> {
     }
 
     // Section 10.1.2.5
-    fn generate(
-        &mut self,
-        bytes: &mut [u8],
-        additional_input: &[u8],
-        _: u64,
-    ) -> Result<(), ReseedRequired> {
+    fn generate(&mut self, bytes: &mut [u8], additional_input: &[u8], _: u64) {
         if !additional_input.is_empty() {
             self.update(additional_input);
         }
@@ -59,7 +54,5 @@ impl<F: HashFn> DrbgVariant for Hmac<F> {
             block.copy_from_slice(&self.v.as_ref()[..block.len()]);
         }
         self.update(additional_input);
-
-        Ok(())
     }
 }

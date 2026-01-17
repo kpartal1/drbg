@@ -34,7 +34,7 @@ fn main() {
         .build();
     let drbg = match drbg {
         Ok(drbg) => drbg,
-        Err(e) => panic!("Failed to instantiate CTR DRBG: {e}"),
+        Err(e) => panic!("Failed to instantiate Hash DRBG: {e}"),
     }
 
     // Getting 10,000 random bytes from DRBG

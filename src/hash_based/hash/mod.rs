@@ -47,12 +47,7 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
     }
 
     // Section 10.1.1.4
-    fn generate(
-        &mut self,
-        bytes: &mut [u8],
-        additional_input: &[u8],
-        reseed_counter: u64,
-    ) -> Result<(), ReseedRequired> {
+    fn generate(&mut self, bytes: &mut [u8], additional_input: &[u8], reseed_counter: u64) {
         if !additional_input.is_empty() {
             let data = [&[0x02], self.v.as_ref(), additional_input].concat();
             let w = F::hash(data);
@@ -70,7 +65,5 @@ impl<F: HashFn> DrbgVariant for Hash<F> {
         util::add(self.v.as_mut(), h.as_ref());
         util::add(self.v.as_mut(), self.c.as_ref());
         util::add(self.v.as_mut(), &reseed_counter.to_be_bytes());
-
-        Ok(())
     }
 }
