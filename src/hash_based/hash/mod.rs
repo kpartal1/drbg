@@ -1,7 +1,4 @@
-use crate::{
-    drbg::variant::{DrbgVariant, ReseedRequired},
-    hash_based::hashfn::HashFn,
-};
+use crate::{drbg::variant::DrbgVariant, hash_based::hashfn::HashFn};
 
 mod util;
 

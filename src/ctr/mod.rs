@@ -1,4 +1,4 @@
-use crate::drbg::variant::{DrbgVariant, ReseedRequired};
+use crate::drbg::variant::DrbgVariant;
 use cipher::Cipher;
 
 mod cipher;
