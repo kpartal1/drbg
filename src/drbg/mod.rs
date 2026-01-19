@@ -68,15 +68,20 @@ impl<V: DrbgVariant> Variant<V> {
         &mut self,
         bytes: &mut [u8],
         additional_input: &[u8],
-        reseed_counter: u64,
     ) -> Result<(), ReseedRequired> {
         if self.reseed_counter > self.reseed_interval {
             return Err(ReseedRequired);
         }
         self.variant
-            .generate(bytes, additional_input, reseed_counter);
+            .generate(bytes, additional_input, self.reseed_counter);
         self.reseed_counter += 1;
         Ok(())
+    }
+
+    fn generate_unchecked(&mut self, bytes: &mut [u8], additional_input: &[u8]) {
+        self.variant
+            .generate(bytes, additional_input, self.reseed_counter);
+        self.reseed_counter += 1;
     }
 }
 
@@ -98,6 +103,7 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         personalization_string: &[u8],
     ) -> Result<Self, DrbgError<E::Error>> {
         // Section 9.1 Step 6
+        // We always use MIN_ENTROPY here for simplicity. Our entropy will be conditioned by df anyway.
         let mut entropy_input = vec![0; V::MIN_ENTROPY];
         entropy
             .fill_bytes(&mut entropy_input)
@@ -136,22 +142,14 @@ impl<Pr: PredictionResistance, V: DrbgVariant, E: Entropy> Drbg<Pr, V, E> {
         // We operate over MAX_BYTES_PER_REQUEST chunks so if we need to reseed, we do.
         for block in bytes.chunks_mut(V::MAX_BYTES_PER_REQUEST) {
             // Section 9.3.1 Step 7
-            if Pr::IS_PR
-                || self
-                    .variant
-                    .generate(block, additional_input, self.variant.reseed_counter)
-                    .is_err()
-            {
+            if Pr::IS_PR || self.variant.generate(block, additional_input).is_err() {
                 // Section 9.3.1 Step 7.1
                 self.reseed(additional_input)?;
                 // Section 9.3.1 Step 7.4
+                // We call generate_unchecked to avoid the redundant reseed_counter check.
+                // reseed_counter is guaranteed to be 1, we just reseeded.
                 // If additional_input was passed into reseed, it is null in the call to generate.
-                // We call generate on the inner variant here to avoid the redundant reseed_counter check.
-                self.variant
-                    .variant
-                    .generate(block, &[], self.variant.reseed_counter);
-                // Since we avoided the reseed_counter check, we need to increment reseed_counter here instead.
-                self.variant.reseed_counter += 1;
+                self.variant.generate_unchecked(block, &[]);
             }
         }
         Ok(())
